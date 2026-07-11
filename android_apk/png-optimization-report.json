@@ -1,0 +1,1172 @@
+{
+  "tool": "Pillow 12.0.0",
+  "mode": "PNG optimize=True, compress_level=9",
+  "pixelCheck": "dimensions + decoded RGBA SHA-256",
+  "files": 116,
+  "optimizedFiles": 116,
+  "bytesBefore": 87951172,
+  "bytesAfter": 85113214,
+  "bytesSaved": 2837958,
+  "items": [
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/alisa/alisa (1).png",
+      "before": 470629,
+      "after": 455604,
+      "saved": 15025,
+      "replaced": true,
+      "rgbaSha256": "103ea3652786050b8a6572ccc53ac4576cbc1277ad848dfaecb1b9e40d182db5",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/alisa/alisa (2).png",
+      "before": 470020,
+      "after": 455037,
+      "saved": 14983,
+      "replaced": true,
+      "rgbaSha256": "2b942b8c5566b44c6f7315653e4776141a1329a2b9a00995ed1dd458c13975d8",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/alisa/alisa (3).png",
+      "before": 469131,
+      "after": 454239,
+      "saved": 14892,
+      "replaced": true,
+      "rgbaSha256": "d7d96f133cf1b5fb2272b22f467ee5c0d884bc8f331de780c18c8e2ef173cf4e",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/alisa/alisa (4).png",
+      "before": 470408,
+      "after": 455283,
+      "saved": 15125,
+      "replaced": true,
+      "rgbaSha256": "0906ffc129e81bb56c9175b4d279cbe3193b8dc3f74da9386a23915a108b4106",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/alisa/alisa (5).png",
+      "before": 469453,
+      "after": 454360,
+      "saved": 15093,
+      "replaced": true,
+      "rgbaSha256": "4fa5de7fd03bf28d1b1569a52673319f8353e4c6e646be726ad193aca25a6b74",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/alisa/alisa (6).png",
+      "before": 469038,
+      "after": 454090,
+      "saved": 14948,
+      "replaced": true,
+      "rgbaSha256": "fab842a9ed778ceaeeb8c6764915faf89e87267835fb1331795350f36bb0d5bf",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (1).png",
+      "before": 595599,
+      "after": 574064,
+      "saved": 21535,
+      "replaced": true,
+      "rgbaSha256": "e366e0e73dec001bdee038bf46745d8f8df59c75c0b8967b1027181c692b0071",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (2).png",
+      "before": 599053,
+      "after": 577305,
+      "saved": 21748,
+      "replaced": true,
+      "rgbaSha256": "7d7c794b62ea91b5223c4bfcd97861fd72ca8803d3bb8fbfff48b4584f832968",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (3).png",
+      "before": 596173,
+      "after": 574536,
+      "saved": 21637,
+      "replaced": true,
+      "rgbaSha256": "dcf41ceffac2f6a645522a70cbaa4009c175ebb87d67648658ab1eb8f72e79ca",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (4).png",
+      "before": 595393,
+      "after": 573795,
+      "saved": 21598,
+      "replaced": true,
+      "rgbaSha256": "ad5588d91daa82554895a1126f4565256e75564e91bc916f7aea58cd3f3b482a",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (5).png",
+      "before": 596224,
+      "after": 574833,
+      "saved": 21391,
+      "replaced": true,
+      "rgbaSha256": "3e9a326ff7918a6b101ea7698e6fd32d564010face95c376602fbaf2b411ac4c",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (6).png",
+      "before": 586460,
+      "after": 564329,
+      "saved": 22131,
+      "replaced": true,
+      "rgbaSha256": "48f9f04504d1f491b27fc37f507a0c0b9f85ad88b5436cdc0ba3c25f3601da0d",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (7).png",
+      "before": 577322,
+      "after": 554820,
+      "saved": 22502,
+      "replaced": true,
+      "rgbaSha256": "6d51830c92f5649df3afc9e4a966b2cff7a7b526040bd82bbea03c827bdee7cd",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (8).png",
+      "before": 597743,
+      "after": 575236,
+      "saved": 22507,
+      "replaced": true,
+      "rgbaSha256": "004767ee183edb69095592a3c4cfd663d672f5ed81e59188439f037df60e5657",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/anan/anan (9).png",
+      "before": 548896,
+      "after": 527373,
+      "saved": 21523,
+      "replaced": true,
+      "rgbaSha256": "d2e06939f295f1f67df7316a4ad1ee863b550f7a03af8bd275533828c2f4d6d2",
+      "width": 930,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c1.png",
+      "before": 2860177,
+      "after": 2782047,
+      "saved": 78130,
+      "replaced": true,
+      "rgbaSha256": "fb927c168fbbcb946b9c20585f045cb2d6c8a5e6503158141c6b2b4f742383b5",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c10.png",
+      "before": 3151403,
+      "after": 3045979,
+      "saved": 105424,
+      "replaced": true,
+      "rgbaSha256": "1d8511baf9bce67d82c0a3fe1013da2d04ccf59f78fd8326290aedc4b063a5a0",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c11.png",
+      "before": 2946479,
+      "after": 2836584,
+      "saved": 109895,
+      "replaced": true,
+      "rgbaSha256": "8d53bccc9bdbf205bb00bdec95b27ba99a51c977d09963471da564e9f67398f5",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c12.png",
+      "before": 3107537,
+      "after": 2991762,
+      "saved": 115775,
+      "replaced": true,
+      "rgbaSha256": "13a2e01b648586b0ffda80bec681314f0e829882589c0606aac70607996e0c77",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c13.png",
+      "before": 2803240,
+      "after": 2715415,
+      "saved": 87825,
+      "replaced": true,
+      "rgbaSha256": "6078a69274cd990907ac62f6de9dec94afce30c6e74c009a0b196f1fa6bb7337",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c14.png",
+      "before": 2428151,
+      "after": 2330973,
+      "saved": 97178,
+      "replaced": true,
+      "rgbaSha256": "1c0f71f08370ebe491b36ca72838a6e4da1711dff5c2a72e7e2978a7a3a40c1b",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c15.png",
+      "before": 1933053,
+      "after": 1824900,
+      "saved": 108153,
+      "replaced": true,
+      "rgbaSha256": "d3a1d0898fe7a45d0d93597a054334dd7f7099df4d7dd1998ef3a0e83f08d59d",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c16.png",
+      "before": 2457521,
+      "after": 2375437,
+      "saved": 82084,
+      "replaced": true,
+      "rgbaSha256": "83db2445f18d10e7fd0b3e55be50412a25fe51fb0425ab55f404402b342441c6",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c2.png",
+      "before": 2673373,
+      "after": 2574848,
+      "saved": 98525,
+      "replaced": true,
+      "rgbaSha256": "1c42406b1440ac2d43136714466d93d110c035874dcf2e9d8b189022c268824d",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c3.png",
+      "before": 2707834,
+      "after": 2594022,
+      "saved": 113812,
+      "replaced": true,
+      "rgbaSha256": "5bdfd2dc19b9f993499777d190d7d0ebfbd5f4b56aba0ba051b6915adaa68fc4",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c4.png",
+      "before": 1778604,
+      "after": 1691829,
+      "saved": 86775,
+      "replaced": true,
+      "rgbaSha256": "872d63ffd8ca977c5a4a446728a7dad7d5846bcd914fe8d3b7e1f5a211561e1a",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c5.png",
+      "before": 1933174,
+      "after": 1830649,
+      "saved": 102525,
+      "replaced": true,
+      "rgbaSha256": "637c48b2a25dda3e404e1f028788284badfadd5deb4db7731d739d2c8d63ccd1",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c6.png",
+      "before": 1884964,
+      "after": 1791321,
+      "saved": 93643,
+      "replaced": true,
+      "rgbaSha256": "51095e43aa7cbd9d014a4a0ba3bc378a0475740a20a34c1f1fe451276e529db0",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c7.png",
+      "before": 2051349,
+      "after": 1961702,
+      "saved": 89647,
+      "replaced": true,
+      "rgbaSha256": "a995d7dd570004b786ea48afe8a77ddbcc1f3afca2ebd0900e55f1ff7ee8361c",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c8.png",
+      "before": 2104223,
+      "after": 1995368,
+      "saved": 108855,
+      "replaced": true,
+      "rgbaSha256": "404a22fe9cd659dfdc06116a5dcb24979c4f107ef02f262ca89c74e4eca1d2ee",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/background/c9.png",
+      "before": 2248571,
+      "after": 2154166,
+      "saved": 94405,
+      "replaced": true,
+      "rgbaSha256": "7d0a877544854c5ff4e790eef334ee6e2998ea539af2768058e7d260eabd1426",
+      "width": 2560,
+      "height": 834
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/coco/coco (1).png",
+      "before": 443173,
+      "after": 431589,
+      "saved": 11584,
+      "replaced": true,
+      "rgbaSha256": "a9ae0e58fd6672e375c0c819f4e44ac4d9399cbffdc95fe8487a6303b475221e",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/coco/coco (2).png",
+      "before": 444349,
+      "after": 432770,
+      "saved": 11579,
+      "replaced": true,
+      "rgbaSha256": "26d28f63636e56969e6f52ed11676bc293ec2385709477452dad4427fc351aaa",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/coco/coco (3).png",
+      "before": 441066,
+      "after": 429731,
+      "saved": 11335,
+      "replaced": true,
+      "rgbaSha256": "e4007490c855d795436bda864a6f2649dbb521d158cab3ff92c6a1b884d4cbbd",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/coco/coco (4).png",
+      "before": 444044,
+      "after": 432317,
+      "saved": 11727,
+      "replaced": true,
+      "rgbaSha256": "4efb48d0823fb42d301bd248e42a63f0fd3435298e31ac77ce157f67ba779191",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/coco/coco (5).png",
+      "before": 445165,
+      "after": 433579,
+      "saved": 11586,
+      "replaced": true,
+      "rgbaSha256": "62ec9d76b4e191824d62ac38542107a9e50a9ca41c41d5fbd25604ecb53b8155",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (1).png",
+      "before": 337277,
+      "after": 330195,
+      "saved": 7082,
+      "replaced": true,
+      "rgbaSha256": "069280371e77ff93d2c0e9b9ab91601d245969c07d22f637705c55592bcd3cbe",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (2).png",
+      "before": 335531,
+      "after": 328461,
+      "saved": 7070,
+      "replaced": true,
+      "rgbaSha256": "2f212ae04053953b38d64c933e2532bc90f21e6f4c97000d60ee6785815e70cf",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (3).png",
+      "before": 341935,
+      "after": 333182,
+      "saved": 8753,
+      "replaced": true,
+      "rgbaSha256": "2061a1890755940b896674b8323d2abdeab5f2ca5ded670b5e512106ceecdd7b",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (4).png",
+      "before": 341829,
+      "after": 334332,
+      "saved": 7497,
+      "replaced": true,
+      "rgbaSha256": "90d3a769e111228e11999b1ae2998698bfbd8f70aa389ce29dcdcadd3f6da5e8",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (5).png",
+      "before": 335172,
+      "after": 328281,
+      "saved": 6891,
+      "replaced": true,
+      "rgbaSha256": "0618c4eb55669d9aa63deb9621b3b2803d66e944293f8575cf3b64dce4fe079b",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (6).png",
+      "before": 333194,
+      "after": 326295,
+      "saved": 6899,
+      "replaced": true,
+      "rgbaSha256": "5db7859bd2819be97a5b6e0c87693fd3371b358d4e814fc1be77822beafbe102",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (7).png",
+      "before": 339239,
+      "after": 332139,
+      "saved": 7100,
+      "replaced": true,
+      "rgbaSha256": "fe534d4537f903e91f28774f1d712b7c165e3e01ac7f835de13357a2a3ed248a",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/ema/ema (8).png",
+      "before": 405240,
+      "after": 396484,
+      "saved": 8756,
+      "replaced": true,
+      "rgbaSha256": "82056b2c6e21cac78a32b226c417d24199da4535bc662e5ae2515e92b6518713",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hanna/hanna (1).png",
+      "before": 556103,
+      "after": 540848,
+      "saved": 15255,
+      "replaced": true,
+      "rgbaSha256": "608b78d769d17d9b4c1ebd287c98dbe21e03c72ed9cd8211964e909607307a54",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hanna/hanna (2).png",
+      "before": 561487,
+      "after": 545834,
+      "saved": 15653,
+      "replaced": true,
+      "rgbaSha256": "5444ddc6b2c38f6de2138f53725f84131b07bc2205462cf143fe0121db50bc6f",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hanna/hanna (3).png",
+      "before": 555254,
+      "after": 539795,
+      "saved": 15459,
+      "replaced": true,
+      "rgbaSha256": "04cc06ea4aa8b5689a447736d6e3403fde22da70a2d6bbdcffcd83150b39898e",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hanna/hanna (4).png",
+      "before": 549292,
+      "after": 534014,
+      "saved": 15278,
+      "replaced": true,
+      "rgbaSha256": "ffbce9ef8253368380b2cb7f8d466c75bbf08790c7a725e6da2cdbb52fd4d7be",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hanna/hanna (5).png",
+      "before": 556315,
+      "after": 540962,
+      "saved": 15353,
+      "replaced": true,
+      "rgbaSha256": "02fdaccbed7873b118a3830dedeb156f778e92f6c8410abf5a5e1f48aa8c2fd0",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hiro/hiro (1).png",
+      "before": 475237,
+      "after": 454202,
+      "saved": 21035,
+      "replaced": true,
+      "rgbaSha256": "07eaba1184b30f5bc20a11fc3b331915cd17c036843e5458acc72603853988ed",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hiro/hiro (2).png",
+      "before": 478804,
+      "after": 457406,
+      "saved": 21398,
+      "replaced": true,
+      "rgbaSha256": "17432827967429449d4e8bdcbe564b8c6a373ecefcd844f160d38ff708871fcc",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hiro/hiro (3).png",
+      "before": 475871,
+      "after": 454935,
+      "saved": 20936,
+      "replaced": true,
+      "rgbaSha256": "2877f9fd6b770c10219baaf702f5a38f62b7f0b88dd9da16f7263a87f62db309",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hiro/hiro (4).png",
+      "before": 475524,
+      "after": 455141,
+      "saved": 20383,
+      "replaced": true,
+      "rgbaSha256": "3155427e46de455771d4bd7f889944eada1616a1ff186a7beaa355d1890a8afd",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hiro/hiro (5).png",
+      "before": 476098,
+      "after": 455054,
+      "saved": 21044,
+      "replaced": true,
+      "rgbaSha256": "a027e81651e4e5a33f1b46b4eea31e78632a596f8b818d0c56ad6ab5678d3e1e",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/hiro/hiro (6).png",
+      "before": 477155,
+      "after": 456285,
+      "saved": 20870,
+      "replaced": true,
+      "rgbaSha256": "e8bad2a4fa3473c170d365b3df359dd53c9ba54692924ba0fd22022c9efb265d",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/icons/icon-192.png",
+      "before": 41974,
+      "after": 41178,
+      "saved": 796,
+      "replaced": true,
+      "rgbaSha256": "666938c60999f8a9a9fc8f1e4c9eec58e765f72bbdee611c9dd030defb9f2ce0",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/icons/icon-512.png",
+      "before": 202120,
+      "after": 195179,
+      "saved": 6941,
+      "replaced": true,
+      "rgbaSha256": "9f32d0277339c2bbe55cfdddc69cb323bcf61fbe8662635ab1cdc486d065fef6",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/icons/icon-maskable-512.png",
+      "before": 201373,
+      "after": 194640,
+      "saved": 6733,
+      "replaced": true,
+      "rgbaSha256": "35e4014e212f389fa26b698c0595e67f5a2ae3c5cdf94b9039b083c21dac62b4",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/mago/mago (1).png",
+      "before": 448570,
+      "after": 443007,
+      "saved": 5563,
+      "replaced": true,
+      "rgbaSha256": "51f889aa533c29ad32e4b23790339c366dfcefd54b0a6b9e6c525732f2501657",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/mago/mago (2).png",
+      "before": 452650,
+      "after": 446686,
+      "saved": 5964,
+      "replaced": true,
+      "rgbaSha256": "52f09f0d6f89fa5fdc059e453f6d8caab4e2c562f963018740b3f593e04fed6a",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/mago/mago (3).png",
+      "before": 448657,
+      "after": 442967,
+      "saved": 5690,
+      "replaced": true,
+      "rgbaSha256": "ea4fd5bec767994fec483e891dc337f1d1e91941a0c0e5bb03b258fbd72d395b",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/mago/mago (4).png",
+      "before": 450514,
+      "after": 444922,
+      "saved": 5592,
+      "replaced": true,
+      "rgbaSha256": "86f643a56e93e1c17fa2153131d02eee829e10735bdec74abbe9acdd23fc37db",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/mago/mago (5).png",
+      "before": 449776,
+      "after": 444286,
+      "saved": 5490,
+      "replaced": true,
+      "rgbaSha256": "4c3fe458f3988a92c96fd3a3ed31c4bc676b5e08da2511e0b2689194887ec2ce",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/meruru/meruru (1).png",
+      "before": 561853,
+      "after": 549171,
+      "saved": 12682,
+      "replaced": true,
+      "rgbaSha256": "3995884767a00f89a15f823fc06931df1e5daac025421ea395c391daf30c2b6f",
+      "width": 781,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/meruru/meruru (2).png",
+      "before": 564110,
+      "after": 551568,
+      "saved": 12542,
+      "replaced": true,
+      "rgbaSha256": "6e5f1669c52b833e5a5d16cdb8e4c457abfb691dc7932c924e05b68cee21d313",
+      "width": 781,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/meruru/meruru (3).png",
+      "before": 560957,
+      "after": 548226,
+      "saved": 12731,
+      "replaced": true,
+      "rgbaSha256": "00f19fd8b14ffbc8502d1659f45d35653ba5a4d4379bcbe6ec817913640c8b79",
+      "width": 781,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/meruru/meruru (4).png",
+      "before": 563609,
+      "after": 551123,
+      "saved": 12486,
+      "replaced": true,
+      "rgbaSha256": "0e909a94d16e18efc65ca6c331e8dfe64dfdb0d8ca801c1c279bb4f20f7f644b",
+      "width": 781,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/meruru/meruru (5).png",
+      "before": 562400,
+      "after": 549959,
+      "saved": 12441,
+      "replaced": true,
+      "rgbaSha256": "52239db08ad583e4e9eea4a9ae5b6266d049c4f5a43ed3a314f0ca9b0f4d4b22",
+      "width": 781,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/meruru/meruru (6).png",
+      "before": 566919,
+      "after": 554734,
+      "saved": 12185,
+      "replaced": true,
+      "rgbaSha256": "41804036a29fba751198b0eff44f9339b0800c08dd81d5db164c57e3393db6c0",
+      "width": 781,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/miria/miria (1).png",
+      "before": 529621,
+      "after": 519461,
+      "saved": 10160,
+      "replaced": true,
+      "rgbaSha256": "e2be1f851dbca465d614e9eccd5a904a8c7dd87b6941a363ae9ef80f8c8db6f8",
+      "width": 732,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/miria/miria (2).png",
+      "before": 532793,
+      "after": 522999,
+      "saved": 9794,
+      "replaced": true,
+      "rgbaSha256": "8e460e75b3ccaf9fe728bcfd9461b756f36434492b6d43f78b81d4c986bde572",
+      "width": 732,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/miria/miria (3).png",
+      "before": 529798,
+      "after": 519875,
+      "saved": 9923,
+      "replaced": true,
+      "rgbaSha256": "b991e5a7f3b004190d6c7a3c2a2e3cd1f524636726bea07fa11b2c3dcf7ee062",
+      "width": 732,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/miria/miria (4).png",
+      "before": 527745,
+      "after": 517923,
+      "saved": 9822,
+      "replaced": true,
+      "rgbaSha256": "af0be807ee57b0ccc0982f2add6e8287ecdfb6fb8ab830155680a70d991ed8a1",
+      "width": 732,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/nanoka/nanoka (1).png",
+      "before": 498301,
+      "after": 492771,
+      "saved": 5530,
+      "replaced": true,
+      "rgbaSha256": "32b6d016ba18b63c63bb20e8ebbd0b1ce3356ed7bb5fe18fb8c9f97ac90ce34c",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/nanoka/nanoka (2).png",
+      "before": 501094,
+      "after": 495408,
+      "saved": 5686,
+      "replaced": true,
+      "rgbaSha256": "b83e4cc7dffc2ad088e40a4c2546e46e184d294231e65b1e159185743f6d1a8a",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/nanoka/nanoka (3).png",
+      "before": 497761,
+      "after": 492131,
+      "saved": 5630,
+      "replaced": true,
+      "rgbaSha256": "c84e59ada05b58364120210e6368b8e88018d2f6fdc815fc7abc54d7c89d79c3",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/nanoka/nanoka (4).png",
+      "before": 498254,
+      "after": 492673,
+      "saved": 5581,
+      "replaced": true,
+      "rgbaSha256": "2b84d303d132cf4ab755a16d037e7af40df86e085bdf6f0ce937c2d6ba1db0a0",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/nanoka/nanoka (5).png",
+      "before": 497530,
+      "after": 492240,
+      "saved": 5290,
+      "replaced": true,
+      "rgbaSha256": "add8beaf7fbc4711b0dc80c9f76d3eff2797656e37a57ff25585949fb88e136e",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/noa/noa (1).png",
+      "before": 563528,
+      "after": 545685,
+      "saved": 17843,
+      "replaced": true,
+      "rgbaSha256": "f80bb0401e0fe660bb44c25ab320ed97fd6337de6ecaec0ea1df5d116db56984",
+      "width": 760,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/noa/noa (2).png",
+      "before": 563883,
+      "after": 545935,
+      "saved": 17948,
+      "replaced": true,
+      "rgbaSha256": "bc68f31c47ed13fadf2ddd195810a6fae4f1e86e685005b4ca0517bae30d01ca",
+      "width": 760,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/noa/noa (3).png",
+      "before": 564925,
+      "after": 547241,
+      "saved": 17684,
+      "replaced": true,
+      "rgbaSha256": "4887db452f8bd64e2ff54fc21f4221c74bde8900b03c96ebac52f9d5887f763d",
+      "width": 760,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/noa/noa (4).png",
+      "before": 565022,
+      "after": 547010,
+      "saved": 18012,
+      "replaced": true,
+      "rgbaSha256": "1f9a2dfc52cb43a88c8da69317d56bfb5b448abc2dfa387609cbcd50f98f822b",
+      "width": 760,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/noa/noa (5).png",
+      "before": 559013,
+      "after": 541114,
+      "saved": 17899,
+      "replaced": true,
+      "rgbaSha256": "a432766be8545ccef6c73081a06029d29c8fe8f995fa713db4e4c7447f4b1e07",
+      "width": 760,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/noa/noa (6).png",
+      "before": 566408,
+      "after": 548619,
+      "saved": 17789,
+      "replaced": true,
+      "rgbaSha256": "13f8bbf411851c6cd602853aefa5f2530ea989d47499bd62e8febd51f83af5ea",
+      "width": 760,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (1).png",
+      "before": 486072,
+      "after": 475051,
+      "saved": 11021,
+      "replaced": true,
+      "rgbaSha256": "e91924f32b6b02b3c7a23fd52a00c5084be415c052b61a9f5ea9b670a8283dee",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (2).png",
+      "before": 485392,
+      "after": 474444,
+      "saved": 10948,
+      "replaced": true,
+      "rgbaSha256": "75206d3ce0cb395657c1e78b960477da21ed7261cc10b91bcaf5e12bdb6840c8",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (3).png",
+      "before": 485401,
+      "after": 474284,
+      "saved": 11117,
+      "replaced": true,
+      "rgbaSha256": "5850c8f0362f0bc1598eb754bf6f534c9b0a1ea85fc589b1cdf956aa118ab981",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (4).png",
+      "before": 489623,
+      "after": 478386,
+      "saved": 11237,
+      "replaced": true,
+      "rgbaSha256": "c1bac502235750168c932b1d4b701983cd0bb5e2697308c8f3ca0e76f4d146ed",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (5).png",
+      "before": 485174,
+      "after": 474085,
+      "saved": 11089,
+      "replaced": true,
+      "rgbaSha256": "c7bb4838a62ab45a84ef629daa656b8f1fd02011bcaf205978f4bfa7c171c227",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (6).png",
+      "before": 485127,
+      "after": 474220,
+      "saved": 10907,
+      "replaced": true,
+      "rgbaSha256": "b1bab3ae4efe64baed409fd5fcd0f4bf19b338f1261c00d4873305e15e135716",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/reia/reia (7).png",
+      "before": 485653,
+      "after": 474525,
+      "saved": 11128,
+      "replaced": true,
+      "rgbaSha256": "d000bfc2cf0c9b95d40766ecc8e6993b7730cf4ed5237e45b044dc26c1969bae",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (1).png",
+      "before": 452118,
+      "after": 436672,
+      "saved": 15446,
+      "replaced": true,
+      "rgbaSha256": "a456c916e50b1055577ec0629dd383f0cce21dfb4919562b457a1429c8dce323",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (2).png",
+      "before": 454975,
+      "after": 439558,
+      "saved": 15417,
+      "replaced": true,
+      "rgbaSha256": "0864da0497a7bcdfcacccebb2c1c1a256d5d21d00f8ecd31642f88d00aa55762",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (3).png",
+      "before": 454132,
+      "after": 438673,
+      "saved": 15459,
+      "replaced": true,
+      "rgbaSha256": "e7ce4a80edff212b11451f3f74401181efff91534adf71a6f44e0302288042d9",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (4).png",
+      "before": 455019,
+      "after": 438754,
+      "saved": 16265,
+      "replaced": true,
+      "rgbaSha256": "95f42a326a1a7e3eeb1e39058762414e819842888bc0222dd3da8c38fe98debd",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (5).png",
+      "before": 451360,
+      "after": 435711,
+      "saved": 15649,
+      "replaced": true,
+      "rgbaSha256": "480f8570d0b2d90277aa07ae9ed6692af1c45c0a80ae21947ef7f94cbcf2ed00",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (6).png",
+      "before": 447363,
+      "after": 432032,
+      "saved": 15331,
+      "replaced": true,
+      "rgbaSha256": "8ca9cee147488c3dfca38314f09e6ca854af1a94b3530ff4ed4ebe7f17a256cd",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/sherri/sherri (7).png",
+      "before": 456804,
+      "after": 441396,
+      "saved": 15408,
+      "replaced": true,
+      "rgbaSha256": "7423667dddc5cc3f972f8497e5a21b0ccd8302f6374e4f2eb9837471b3ea9231",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (1).png",
+      "before": 522871,
+      "after": 512758,
+      "saved": 10113,
+      "replaced": true,
+      "rgbaSha256": "5bcd3b77d3442339f29e1d6a30d084f183401322587d2b39182cff0e0015485d",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (10).png",
+      "before": 553641,
+      "after": 542817,
+      "saved": 10824,
+      "replaced": true,
+      "rgbaSha256": "0fa832eb360ef5bdc29c6e17101d552bce806c70181f189049a92fe7669fd8e6",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (11).png",
+      "before": 521219,
+      "after": 510586,
+      "saved": 10633,
+      "replaced": true,
+      "rgbaSha256": "4fa22dbbd49a7ddbc40658de8dd0f9a246e3710f2908ad4e35b0a9e688b979d4",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (12).png",
+      "before": 528611,
+      "after": 518833,
+      "saved": 9778,
+      "replaced": true,
+      "rgbaSha256": "14f9b711ff0b155cd9eca398e03674e1816c3147432cebc77b00695da1f00e5d",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (13).png",
+      "before": 525842,
+      "after": 517553,
+      "saved": 8289,
+      "replaced": true,
+      "rgbaSha256": "ffe7b86331310736fc699e3ad41762d112c691feb190a5c696ed6112b0f02525",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (14).png",
+      "before": 522496,
+      "after": 511967,
+      "saved": 10529,
+      "replaced": true,
+      "rgbaSha256": "43e5201ef3cc9bb7f998e5c7feab8dfc51c530ec53e6f826e39e39178067ae87",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (15).png",
+      "before": 522578,
+      "after": 512159,
+      "saved": 10419,
+      "replaced": true,
+      "rgbaSha256": "3ec6cf2c0465ebc8ef7c5bbd51b5bcffe56a8359c7910461dc3062ebe28998d7",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (16).png",
+      "before": 520579,
+      "after": 510434,
+      "saved": 10145,
+      "replaced": true,
+      "rgbaSha256": "99c004bfaba25cbb1da19390e20491c18d5e0263225324484a225d82555f5a97",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (17).png",
+      "before": 522436,
+      "after": 512181,
+      "saved": 10255,
+      "replaced": true,
+      "rgbaSha256": "cd8aeac500f623797960950c0e42af08a55eaea111959856e033b5d72eaf4a6d",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (18).png",
+      "before": 526763,
+      "after": 518211,
+      "saved": 8552,
+      "replaced": true,
+      "rgbaSha256": "769aa5430e15ec43453f99810ababba443d84045e36234687207fa6acf972551",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (2).png",
+      "before": 523569,
+      "after": 513503,
+      "saved": 10066,
+      "replaced": true,
+      "rgbaSha256": "38e1455bd8c3a8317dc09984cd5243dae5f5c2c0248362abb6cdd11c734c56a7",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (3).png",
+      "before": 520529,
+      "after": 510416,
+      "saved": 10113,
+      "replaced": true,
+      "rgbaSha256": "bafee90346647ac717942a4dff92e99315a9fad3f4ffb43896c23d233caf1fa1",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (4).png",
+      "before": 522921,
+      "after": 512782,
+      "saved": 10139,
+      "replaced": true,
+      "rgbaSha256": "e155064527adc4f4a98de8c5779dfeb0bf9f7723bcad24c056cdfd193e774963",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (5).png",
+      "before": 530689,
+      "after": 521081,
+      "saved": 9608,
+      "replaced": true,
+      "rgbaSha256": "d18b7e5562673cc7e5ec5789b5d30dce98bddeeba482cefe43ab23b45d9319de",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (6).png",
+      "before": 531158,
+      "after": 520876,
+      "saved": 10282,
+      "replaced": true,
+      "rgbaSha256": "bd16ab279c83075867e3909fdfe61bef28164181c2c266b664a25b5414f13783",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (7).png",
+      "before": 533739,
+      "after": 525345,
+      "saved": 8394,
+      "replaced": true,
+      "rgbaSha256": "a224295b7ee40f3e3fee74339e203689c29b9a0a45432692c15addaf7c191c9a",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (8).png",
+      "before": 517847,
+      "after": 507440,
+      "saved": 10407,
+      "replaced": true,
+      "rgbaSha256": "7c68c72586c3bcb852d90e866903a5dd4f1bd7a41f5c3b3c450dded469f12862",
+      "width": 700,
+      "height": 700
+    },
+    {
+      "path": "D:/qqbiaoqingbao/Text_box-of-mahoushoujo_no_majosaiban-main/yuki/yuki (9).png",
+      "before": 552764,
+      "after": 542013,
+      "saved": 10751,
+      "replaced": true,
+      "rgbaSha256": "90788792a1bdeee2364b67e5ac4495c3933ce9d5dfaf85377ab4cfc5a3517efc",
+      "width": 700,
+      "height": 700
+    }
+  ]
+}

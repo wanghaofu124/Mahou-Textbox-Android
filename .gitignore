@@ -1,0 +1,13 @@
+.vs/
+_pycache_/
+__pycache__/
+*.pyc
+android_apk/release.keystore
+android_apk/release-signing.properties
+android_apk/.gradle/
+android_apk/app/build/
+android_apk/build/
+android_apk/assets/
+android_apk/*.apk
+android_apk/*.apk.idsig
+android_apk/local.properties

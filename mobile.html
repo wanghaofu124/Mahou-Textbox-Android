@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#17181d" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <script src="theme-bootstrap.js"></script>
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="魔裁文本框" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="application-name" content="魔裁文本框" />
+    <title>魔裁文本框生成器</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="mobile.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="preview-wrap" aria-label="图片预览">
+        <canvas id="preview" width="2560" height="834"></canvas>
+      </section>
+
+      <section class="controls" aria-label="生成设置">
+        <label class="field field-text">
+          <span>台词</span>
+          <textarea id="lineText" rows="3" maxlength="180" aria-label="台词输入">我宣布，今天群里的整活浓度已经超标了。</textarea>
+        </label>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>角色</span>
+            <select id="characterSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
+            <div class="stepper">
+              <button id="characterPrev" type="button" aria-label="上一个角色">‹</button>
+              <output id="characterLabel" role="status" aria-live="polite"></output>
+              <button id="characterNext" type="button" aria-label="下一个角色">›</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>表情</span>
+            <select id="emotionSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
+            <div class="stepper">
+              <button id="emotionPrev" type="button" aria-label="上一个表情">‹</button>
+              <output id="emotionLabel" role="status" aria-live="polite"></output>
+              <button id="emotionNext" type="button" aria-label="下一个表情">›</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>背景</span>
+            <select id="backgroundSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
+            <div class="stepper">
+              <button id="backgroundPrev" type="button" aria-label="上一个背景">‹</button>
+              <output id="backgroundLabel" role="status" aria-live="polite"></output>
+              <button id="backgroundNext" type="button" aria-label="下一个背景">›</button>
+            </div>
+          </label>
+        </div>
+
+        <div class="popup-pref-row">
+          <label class="field field-qq-export">
+            <span>QQ发出大小</span>
+            <div class="stepper">
+              <button id="qqExportSizePrev" type="button" aria-label="QQ发出尺寸上一档">‹</button>
+              <output id="qqExportSizeLabel" role="status" aria-live="polite"></output>
+              <button id="qqExportSizeNext" type="button" aria-label="QQ发出尺寸下一档">›</button>
+            </div>
+          </label>
+
+          <label class="field field-theme">
+            <span>界面配色</span>
+            <div class="stepper">
+              <button id="uiThemePrev" type="button" aria-label="界面配色上一套">‹</button>
+              <output id="uiThemeLabel" role="status" aria-live="polite"></output>
+              <button id="uiThemeNext" type="button" aria-label="界面配色下一套">›</button>
+            </div>
+          </label>
+        </div>
+
+        <div class="button-row">
+          <button id="popupButton" type="button" aria-label="打开弹窗模式">弹窗模式</button>
+          <button id="randomButton" type="button" aria-label="随机选择当前角色的表情和背景">随机表情</button>
+          <button id="addBackgroundButton" type="button" aria-label="添加自定义背景">添加背景</button>
+          <button id="assetManagerButton" type="button" aria-label="打开素材管理">素材管理</button>
+          <button id="qqButton" type="button" class="primary" aria-label="发到 QQ">发到 QQ</button>
+          <button id="shareButton" type="button" aria-label="分享或保存图片">分享/保存</button>
+          <button id="aboutButton" type="button" aria-label="打开关于与隐私说明">关于与隐私</button>
+        </div>
+      </section>
+    </main>
+    <script src="mobile.js"></script>
+  </body>
+</html>

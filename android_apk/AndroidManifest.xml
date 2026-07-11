@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <queries>
+        <package android:name="com.tencent.mobileqq" />
+        <package android:name="com.tencent.tim" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ImagePickerActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
+        <activity
+            android:name=".AssetTransferActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
+        <activity
+            android:name=".ShareProxyActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:finishOnTaskLaunch="true"
+            android:theme="@style/TransparentShareTheme" />
+
+        <service
+            android:name=".PopupService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started persistent overlay for creating and sharing chat images" />
+        </service>
+
+        <receiver
+            android:name=".PopupActionReceiver"
+            android:exported="false" />
+
+        <provider
+            android:name=".ImageShareProvider"
+            android:authorities="com.mahou.textbox.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

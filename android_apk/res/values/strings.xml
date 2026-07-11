@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">魔裁文本框</string>
+    <string name="popup_channel_name">悬浮窗运行状态</string>
+    <string name="popup_notification_title">魔裁文本框正在运行</string>
+    <string name="popup_notification_text">点按返回生成器，或使用操作按钮关闭悬浮窗</string>
+    <string name="popup_restore">恢复窗口</string>
+    <string name="popup_stop">关闭</string>
+</resources>

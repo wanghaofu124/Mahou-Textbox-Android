@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { "C:\Users\Administrator\AppData\Local\Android\Sdk" }
+$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { "$env:LOCALAPPDATA\Android\Sdk" }
 $adb = Join-Path $sdk "platform-tools\adb.exe"
 $pkg = "com.mahou.textbox"
 $apk = Join-Path $PSScriptRoot "mahou-textbox-0.4.0-debug.apk"

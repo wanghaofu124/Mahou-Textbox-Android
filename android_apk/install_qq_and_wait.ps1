@@ -1,6 +1,9 @@
 # Install QQ on emulator and wait for user login
+param(
+    [string]$ApkPath = ""
+)
 $ErrorActionPreference = "Stop"
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "C:\Users\Administrator\AppData\Local\Android\Sdk" }
+$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:LOCALAPPDATA\Android\Sdk" }
 $adb = Join-Path $sdk "platform-tools\adb.exe"
 if ($env:ANDROID_SERIAL) {
     $serial = $env:ANDROID_SERIAL
@@ -10,7 +13,13 @@ if ($env:ANDROID_SERIAL) {
     $serial = $device.Matches[0].Groups[1].Value
 }
 $pkg = "com.tencent.mobileqq"
-$localApk = "D:\qqbiaoqingbao\downloads\qq.apk"
+if ($ApkPath) {
+    $localApk = $ApkPath
+} elseif (Test-Path (Join-Path $PSScriptRoot "qq.apk")) {
+    $localApk = Join-Path $PSScriptRoot "qq.apk"
+} else {
+    $localApk = Join-Path $env:USERPROFILE "Downloads\qq.apk"
+}
 
 function Invoke-Adb([string[]]$AdbArgs) {
     $prev = $ErrorActionPreference

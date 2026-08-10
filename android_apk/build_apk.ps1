@@ -10,7 +10,7 @@ $Sdk = if ($env:ANDROID_HOME) {
 } elseif ($env:ANDROID_SDK_ROOT) {
     $env:ANDROID_SDK_ROOT
 } else {
-    "C:\Users\Administrator\AppData\Local\Android\Sdk"
+    "$env:LOCALAPPDATA\Android\Sdk"
 }
 $Gradle = Join-Path $AndroidRoot "gradlew.bat"
 $ExpectedCertificate = (Get-Content -LiteralPath (Join-Path $AndroidRoot "release-cert.sha256") -Raw).Trim().ToLowerInvariant()

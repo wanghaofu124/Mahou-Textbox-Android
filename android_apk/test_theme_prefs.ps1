@@ -1,6 +1,6 @@
 # Theme prefs + chrome smoke tests (debug intents + MahouTest logcat)
 $ErrorActionPreference = "Stop"
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "C:\Users\Administrator\AppData\Local\Android\Sdk" }
+$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:LOCALAPPDATA\Android\Sdk" }
 $adb = Join-Path $sdk "platform-tools\adb.exe"
 function Resolve-AndroidSerial {
     if ($env:ANDROID_SERIAL) { return $env:ANDROID_SERIAL }

@@ -539,42 +539,9 @@ public class PopupService extends Service {
         opacityControls.setVisibility(View.GONE);
         root.addView(opacityControls, new LinearLayout.LayoutParams(-1, dp(48)));
 
-        webView = new WebView(this) {
-            @Override
-            public void onWindowFocusChanged(boolean hasWindowFocus) {
-                super.onWindowFocusChanged(hasWindowFocus);
-                if (hasWindowFocus && placement.isEditing()) requestKeyboard();
-            }
-        };
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        WebSettings settingsWeb = webView.getSettings();
-        settingsWeb.setJavaScriptEnabled(true);
-        settingsWeb.setDomStorageEnabled(true);
-        settingsWeb.setAllowFileAccess(false);
-        settingsWeb.setAllowContentAccess(false);
-        settingsWeb.setAllowFileAccessFromFileURLs(false);
-        settingsWeb.setAllowUniversalAccessFromFileURLs(false);
-        settingsWeb.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settingsWeb.setBuiltInZoomControls(false);
-        settingsWeb.setDisplayZoomControls(false);
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onProgressChanged(WebView view, int progress) {
-                if (progress == 100 && !destroyed) {
-                    deliverGeneratorState(GeneratorStateStore.read(PopupService.this));
-                    lastNativeState = null;
-                    publishNativeState();
-                }
-            }
-        });
-        webView.setWebViewClient(LocalWebContent.createClient(this, null));
-        webView.addJavascriptInterface(new PopupBridge(), "AndroidBridge");
-        webView.loadUrl(LocalWebContent.DOCK_URL + "?dock=1");
-        applyContentAlpha();
         FrameLayout webFrame = new FrameLayout(this);
         webFrame.setBackgroundColor(Color.TRANSPARENT);
-        webFrame.addView(webView, new FrameLayout.LayoutParams(-1, -1));
+        createPopupWebView(webFrame);
         accessibleActionLayer = new AccessibleActionLayer(this, this::triggerWebAction);
         accessibleActionLayer.setVisibility(View.GONE);
         accessibleActionLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
@@ -589,6 +556,67 @@ public class PopupService extends Service {
         attachGesture(drag, false);
         attachGesture(resize, true);
         return root;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void createPopupWebView(FrameLayout host) {
+        if (destroyed || webView != null) return;
+        WebView view = new WebView(this) {
+            @Override
+            public void onWindowFocusChanged(boolean hasWindowFocus) {
+                super.onWindowFocusChanged(hasWindowFocus);
+                if (hasWindowFocus && placement.isEditing()) requestKeyboard();
+            }
+        };
+        webView = view;
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(true);
+        WebSettings settingsWeb = view.getSettings();
+        settingsWeb.setJavaScriptEnabled(true);
+        settingsWeb.setDomStorageEnabled(true);
+        settingsWeb.setAllowFileAccess(false);
+        settingsWeb.setAllowContentAccess(false);
+        settingsWeb.setAllowFileAccessFromFileURLs(false);
+        settingsWeb.setAllowUniversalAccessFromFileURLs(false);
+        settingsWeb.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settingsWeb.setBuiltInZoomControls(false);
+        settingsWeb.setDisplayZoomControls(false);
+        view.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView changed, int progress) {
+                if (progress == 100 && !destroyed && webView == view) {
+                    deliverGeneratorState(GeneratorStateStore.read(PopupService.this));
+                    lastNativeState = null;
+                    publishNativeState();
+                }
+            }
+        });
+        view.setWebViewClient(LocalWebContent.createClient(this, null, new LocalWebContent.WebViewLifecycleListener() {
+            @Override public void onMainFrameError(String url, int errorCode, String description) {
+                Log.e("MahouWebView", "popup page error " + errorCode + " " + description + " url=" + url);
+            }
+
+            @Override public boolean onRenderProcessGone(WebView failed, boolean didCrash) {
+                Log.e("MahouWebView", "popup renderer exited; crashed=" + didCrash);
+                mainHandler.post(() -> replacePopupWebView(failed));
+                return true;
+            }
+        }));
+        view.addJavascriptInterface(new PopupBridge(), "AndroidBridge");
+        host.addView(view, 0, new FrameLayout.LayoutParams(-1, -1));
+        applyContentAlpha();
+        view.loadUrl(LocalWebContent.DOCK_URL + "?dock=1");
+    }
+
+    private void replacePopupWebView(WebView failed) {
+        if (webView != failed) return;
+        FrameLayout host = failed.getParent() instanceof FrameLayout ? (FrameLayout) failed.getParent() : null;
+        if (host != null) host.removeView(failed);
+        failed.removeJavascriptInterface("AndroidBridge");
+        failed.stopLoading();
+        failed.destroy();
+        webView = null;
+        if (!destroyed && host != null) createPopupWebView(host);
     }
 
     private LinearLayout buildMiniView() {

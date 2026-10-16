@@ -17,6 +17,7 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.util.Log;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.ExtractedText;
@@ -53,6 +54,13 @@ public class MahouInputMethodService extends InputMethodService {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static final long OFFER_KEEP_MS = 90_000L;
     private WebView webView;
+    private FrameLayout inputRoot;
+    private int inputViewHeight;
+    private int inputViewBackground;
+    private long webViewCreatedAt;
+    private int webViewRecoveryCount;
+    private int healthCheckGeneration;
+    private boolean imePageReady;
     private Uri offeredImage;
     private int offerGeneration;
     private final Runnable dropOfferedImage = this::dropOfferedImageNow;
@@ -131,16 +139,38 @@ public class MahouInputMethodService extends InputMethodService {
     }
 
     @Override @SuppressLint("SetJavaScriptEnabled") public View onCreateInputView() {
-        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); }
+        if (webView != null) {
+            if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
+            webView.removeJavascriptInterface("AndroidBridge");
+            webView.destroy();
+        }
         FrameLayout root = new FrameLayout(this);
         int height = Math.min(dp(410), Math.round(getResources().getDisplayMetrics().heightPixels * .50f));
+        inputRoot = root;
+        inputViewHeight = height;
         root.setLayoutParams(new FrameLayout.LayoutParams(-1, height));
         root.setMinimumHeight(height);
         int background = ThemeChrome.resolve(ThemeChrome.loadThemeKey(getSharedPreferences("mahou_popup_prefs", MODE_PRIVATE))).webBg;
+        inputViewBackground = background;
         root.setBackgroundColor(background);
-        webView = new WebView(this);
-        webView.setBackgroundColor(background);
-        WebSettings settings = webView.getSettings();
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            view.setPadding(bars.left, 0, bars.right, bars.bottom);
+            if (webView != null) webView.setLayoutParams(new FrameLayout.LayoutParams(-1, Math.max(dp(240), inputViewHeight - bars.bottom)));
+            return WindowInsetsCompat.CONSUMED;
+        });
+        attachImeWebView(root);
+        return root;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void attachImeWebView(FrameLayout root) {
+        WebView view = new WebView(this);
+        webView = view;
+        imePageReady = false;
+        webViewCreatedAt = android.os.SystemClock.uptimeMillis();
+        view.setBackgroundColor(inputViewBackground);
+        WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
@@ -152,35 +182,115 @@ public class MahouInputMethodService extends InputMethodService {
         settings.setDisplayZoomControls(false);
         settings.setUseWideViewPort(false);
         settings.setLoadWithOverviewMode(false);
-        webView.setInitialScale(0);
-        webView.setHorizontalScrollBarEnabled(false);
-        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        webView.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> applyImeViewport());
-        webView.addJavascriptInterface(new ImeBridge(), "AndroidBridge");
-        webView.setWebViewClient(LocalWebContent.createClient(this, () -> {
+        view.setInitialScale(0);
+        view.setHorizontalScrollBarEnabled(false);
+        view.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(true);
+        if (Build.VERSION.SDK_INT >= 26) {
+            view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
+        }
+        view.addOnLayoutChangeListener((changed, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> applyImeViewport());
+        view.addJavascriptInterface(new ImeBridge(), "AndroidBridge");
+        view.setWebViewClient(LocalWebContent.createClient(this, () -> {
+            if (webView != view || destroyed) return;
+            imePageReady = true;
+            webViewRecoveryCount = 0;
             appliedViewport = 0;
             applyImeViewport();
             deliverState();
             deliverTarget();
+        }, new LocalWebContent.WebViewLifecycleListener() {
+            @Override public void onPageStarted(String url) {
+                Log.i("MahouIme", "page started: " + url);
+            }
+
+            @Override public void onPageFinished(String url) {
+                if (webView == view) Log.i("MahouIme", "page finished: " + url);
+            }
+
+            @Override public void onMainFrameError(String url, int errorCode, String description) {
+                Log.e("MahouIme", "main page error " + errorCode + " " + description + " url=" + url);
+            }
+
+            @Override public boolean onRenderProcessGone(WebView failed, boolean didCrash) {
+                Log.e("MahouIme", "renderer exited; crashed=" + didCrash);
+                main.post(() -> recoverImeWebView(failed, "renderer-exit"));
+                return true;
+            }
         }));
-        root.addView(webView, new FrameLayout.LayoutParams(-1, height));
-        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
-            androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            view.setPadding(bars.left, 0, bars.right, bars.bottom);
-            if (webView != null) webView.setLayoutParams(new FrameLayout.LayoutParams(-1, Math.max(dp(240), height - bars.bottom)));
-            return WindowInsetsCompat.CONSUMED;
-        });
-        webView.loadUrl(LocalWebContent.ORIGIN + "/assets/ime.html?ime=1");
-        return root;
+        root.addView(view, new FrameLayout.LayoutParams(-1, inputViewHeight));
+        view.loadUrl(LocalWebContent.ORIGIN + "/assets/ime.html?ime=1");
+    }
+
+    private void recoverImeWebView(WebView failed, String reason) {
+        if (destroyed || inputRoot == null || webView != failed) return;
+        if (webViewRecoveryCount >= 2) {
+            Log.e("MahouIme", "recovery limit reached after " + reason);
+            return;
+        }
+        ++webViewRecoveryCount;
+        ++healthCheckGeneration;
+        Log.w("MahouIme", "rebuilding input page after " + reason);
+        if (failed.getParent() instanceof ViewGroup) ((ViewGroup) failed.getParent()).removeView(failed);
+        failed.removeJavascriptInterface("AndroidBridge");
+        failed.stopLoading();
+        failed.destroy();
+        webView = null;
+        appliedViewport = 0;
+        attachImeWebView(inputRoot);
+        if (isInputViewShown()) webView.requestFocus();
+    }
+
+    private void checkImeWebViewHealth() {
+        WebView current = webView;
+        if (destroyed || current == null) return;
+        int generation = ++healthCheckGeneration;
+        main.postDelayed(() -> {
+            if (destroyed || webView != current || generation != healthCheckGeneration) return;
+            if (!imePageReady) {
+                if (android.os.SystemClock.uptimeMillis() - webViewCreatedAt >= 3500) {
+                    recoverImeWebView(current, "page-load-timeout");
+                } else checkImeWebViewHealth();
+                return;
+            }
+            current.evaluateJavascript("(function(){var e=document.querySelector('.workspace');if(!e)return false;var r=e.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(e).display!=='none';})()", value -> {
+                if (destroyed || webView != current || generation != healthCheckGeneration) return;
+                if (!"true".equals(value)) recoverImeWebView(current, "page-health-check");
+                else {
+                    Log.i("MahouIme", "page health ok; view=" + current.getWidth() + "x" + current.getHeight()
+                            + " shown=" + current.isShown() + " alpha=" + current.getAlpha()
+                            + " layer=" + current.getLayerType());
+                    refreshImeView();
+                }
+            });
+        }, 1200);
+    }
+
+    private void refreshImeView() {
+        if (inputRoot != null) {
+            inputRoot.setVisibility(View.VISIBLE);
+            inputRoot.setAlpha(1f);
+            inputRoot.requestLayout();
+        }
+        if (webView != null) {
+            webView.setVisibility(View.VISIBLE);
+            webView.setAlpha(1f);
+            webView.requestLayout();
+            webView.invalidate();
+            webView.postInvalidateOnAnimation();
+            webView.requestFocus();
+        }
     }
 
     @Override public boolean onEvaluateFullscreenMode() { return false; }
 
     @Override public void onWindowShown() {
         super.onWindowShown();
-        if (webView != null) webView.requestFocus();
+        if (webView != null) {
+            refreshImeView();
+            checkImeWebViewHealth();
+        }
     }
 
     private int appliedViewport;
@@ -215,6 +325,8 @@ public class MahouInputMethodService extends InputMethodService {
         ImeReturnNotifier.hide(this);
         deliverState();
         deliverTarget();
+        refreshImeView();
+        checkImeWebViewHealth();
     }
 
     // InputMethodService owns Back, including predictive Back. Hidden keyboards must not consume it.
@@ -245,7 +357,13 @@ public class MahouInputMethodService extends InputMethodService {
         ImeReturnChip.hide(this);
         ImeReturnNotifier.hide(this);
         if (active == this) active = null;
-        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); webView = null; }
+        if (webView != null) {
+            if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
+            webView.removeJavascriptInterface("AndroidBridge");
+            webView.destroy();
+            webView = null;
+        }
+        inputRoot = null;
         super.onDestroy();
     }
 

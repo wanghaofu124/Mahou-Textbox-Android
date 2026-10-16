@@ -6,17 +6,22 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
+import android.view.ViewGroup;
 import org.json.JSONObject;
 
 /** Translucent caption sheet. Typing stays in 魔裁 so returning never needs the IME picker. */
 public class ImeEditorActivity extends Activity {
     private static final int REQUEST_RECORD_AUDIO = 8021;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private WebView webView;
+    private FrameLayout editorRoot;
     private boolean returning;
     private boolean builtInKeyboard;
     private boolean voicePreparing;
@@ -33,8 +38,18 @@ public class ImeEditorActivity extends Activity {
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        webView = new WebView(this);
-        WebSettings settings = webView.getSettings();
+        editorRoot = root;
+        setContentView(root);
+        voiceInput = new OfflineSpeechInput(this);
+        createEditorWebView();
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void createEditorWebView() {
+        if (isFinishing() || editorRoot == null || webView != null) return;
+        WebView view = new WebView(this);
+        webView = view;
+        WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
@@ -43,14 +58,33 @@ public class ImeEditorActivity extends Activity {
         settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setBlockNetworkLoads(true);
-        webView.setBackgroundColor(0);
-        webView.addJavascriptInterface(new EditorBridge(), "AndroidBridge");
-        webView.setWebViewClient(LocalWebContent.createClient(this, () ->
-                webView.evaluateJavascript("window.initializeImeEditor&&window.initializeImeEditor();", null)));
-        root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
-        setContentView(root);
-        voiceInput = new OfflineSpeechInput(this);
-        webView.loadUrl(LocalWebContent.ORIGIN + "/assets/ime-editor.html");
+        view.setBackgroundColor(0);
+        view.addJavascriptInterface(new EditorBridge(), "AndroidBridge");
+        view.setWebViewClient(LocalWebContent.createClient(this, () -> {
+            if (webView == view) view.evaluateJavascript("window.initializeImeEditor&&window.initializeImeEditor();", null);
+        }, new LocalWebContent.WebViewLifecycleListener() {
+            @Override public void onMainFrameError(String url, int errorCode, String description) {
+                Log.e("MahouWebView", "caption editor page error " + errorCode + " " + description + " url=" + url);
+            }
+
+            @Override public boolean onRenderProcessGone(WebView failed, boolean didCrash) {
+                Log.e("MahouWebView", "caption editor renderer exited; crashed=" + didCrash);
+                mainHandler.post(() -> replaceEditorWebView(failed));
+                return true;
+            }
+        }));
+        editorRoot.addView(view, new FrameLayout.LayoutParams(-1, -1));
+        view.loadUrl(LocalWebContent.ORIGIN + "/assets/ime-editor.html");
+    }
+
+    private void replaceEditorWebView(WebView failed) {
+        if (webView != failed) return;
+        if (failed.getParent() instanceof ViewGroup) ((ViewGroup) failed.getParent()).removeView(failed);
+        failed.removeJavascriptInterface("AndroidBridge");
+        failed.stopLoading();
+        failed.destroy();
+        webView = null;
+        if (!isFinishing()) createEditorWebView();
     }
 
     @Override protected void onDestroy() {
@@ -59,15 +93,19 @@ public class ImeEditorActivity extends Activity {
             voiceInput = null;
         }
         if (webView != null) {
+            if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
             webView.removeJavascriptInterface("AndroidBridge");
             webView.destroy();
             webView = null;
         }
+        editorRoot = null;
         super.onDestroy();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        if (webView == null) createEditorWebView();
+        if (webView != null) webView.onResume();
         finishIfImageKeyboardSelected();
     }
 

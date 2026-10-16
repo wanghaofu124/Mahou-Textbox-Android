@@ -291,7 +291,7 @@ final class OfflineSpeechInput {
         connection.setConnectTimeout(20_000);
         connection.setReadTimeout(30_000);
         connection.setUseCaches(false);
-        connection.setRequestProperty("User-Agent", "MahouTextbox/0.7.27");
+        connection.setRequestProperty("User-Agent", "MahouTextbox/0.7.28");
         try {
             int response = connection.getResponseCode();
             if (response != HttpURLConnection.HTTP_OK) throw new IOException("Model server returned HTTP " + response);

@@ -14,10 +14,13 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
@@ -60,6 +63,7 @@ public class MainActivity extends ComponentActivity {
     private static final String ACTION_ASSETS_CHANGED = "com.mahou.textbox.ASSETS_CHANGED";
 
     private WebView webView;
+    private FrameLayout contentRoot;
     private AccessibleActionLayer accessibleActionLayer;
     private boolean startPopupAfterNotificationRequest;
     private boolean editing;
@@ -67,6 +71,7 @@ public class MainActivity extends ComponentActivity {
     private boolean activityResumed;
     private long deliveredStateRevision = -1L;
     private final ExecutorService exportWorker = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean exportBusy;
     private volatile boolean destroyed;
 
@@ -140,11 +145,7 @@ public class MainActivity extends ComponentActivity {
         super.onCreate(savedInstanceState);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         FrameLayout root = new FrameLayout(this);
-        webView = new WebView(this);
-        root.addView(webView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        ));
+        contentRoot = root;
         accessibleActionLayer = new AccessibleActionLayer(this, new AccessibleActionLayer.ActionHandler() {
             @Override
             public void onAction(String action) {
@@ -167,12 +168,33 @@ public class MainActivity extends ComponentActivity {
         setContentView(root);
         ViewCompat.requestApplyInsets(root);
 
+        createMainWebView();
         applyWindowChromeTheme(ThemeChrome.loadThemeKey(
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         ));
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        registerImageReceiver();
+        registerAssetTransferReceiver();
+        IntentFilter dataChanges = new IntentFilter(GeneratorStateStore.ACTION_STATE_CHANGED);
+        dataChanges.addAction(ACTION_ASSETS_CHANGED);
+        ContextCompat.registerReceiver(this, generatorStateReceiver, dataChanges,
+                ContextCompat.RECEIVER_NOT_EXPORTED);
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                handleBackPressed();
+            }
+        });
+    }
 
-        WebSettings settings = webView.getSettings();
+    @SuppressLint("SetJavaScriptEnabled")
+    private void createMainWebView() {
+        if (destroyed || contentRoot == null || webView != null) return;
+        WebView view = new WebView(this);
+        webView = view;
+        contentRoot.addView(view, 0, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
@@ -184,29 +206,39 @@ public class MainActivity extends ComponentActivity {
         settings.setDisplayZoomControls(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setBlockNetworkLoads(true);
-
-        if (BuildConfig.DEBUG) {
-            webView.setWebChromeClient(new WebChromeClient());
-        }
-        webView.setWebViewClient(LocalWebContent.createClient(this, () -> {
+        if (BuildConfig.DEBUG) view.setWebChromeClient(new WebChromeClient());
+        view.setWebViewClient(LocalWebContent.createClient(this, () -> {
+            if (webView != view || destroyed) return;
             deliveredStateRevision = -1L;
             if (activityResumed) deliverGeneratorState(GeneratorStateStore.read(this));
             scheduleTestIntentIfNeeded();
-        }));
-        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
-        registerImageReceiver();
-        registerAssetTransferReceiver();
-        IntentFilter dataChanges = new IntentFilter(GeneratorStateStore.ACTION_STATE_CHANGED);
-        dataChanges.addAction(ACTION_ASSETS_CHANGED);
-        ContextCompat.registerReceiver(this, generatorStateReceiver, dataChanges,
-                ContextCompat.RECEIVER_NOT_EXPORTED);
-        webView.loadUrl(LocalWebContent.START_URL);
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                handleBackPressed();
+        }, new LocalWebContent.WebViewLifecycleListener() {
+            @Override public void onMainFrameError(String url, int errorCode, String description) {
+                Log.e("MahouWebView", "main page error " + errorCode + " " + description + " url=" + url);
             }
-        });
+
+            @Override public boolean onRenderProcessGone(WebView failed, boolean didCrash) {
+                Log.e("MahouWebView", "main renderer exited; crashed=" + didCrash);
+                mainHandler.post(() -> replaceMainWebView(failed));
+                return true;
+            }
+        }));
+        view.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
+        if (Build.VERSION.SDK_INT >= 26) {
+            view.setRendererPriorityPolicy(activityResumed
+                    ? WebView.RENDERER_PRIORITY_IMPORTANT : WebView.RENDERER_PRIORITY_BOUND, true);
+        }
+        view.loadUrl(LocalWebContent.START_URL);
+    }
+
+    private void replaceMainWebView(WebView failed) {
+        if (webView != failed) return;
+        if (failed.getParent() instanceof ViewGroup) ((ViewGroup) failed.getParent()).removeView(failed);
+        failed.removeJavascriptInterface("AndroidBridge");
+        failed.stopLoading();
+        failed.destroy();
+        webView = null;
+        if (activityResumed && !destroyed) createMainWebView();
     }
 
     @Override
@@ -410,7 +442,10 @@ public class MainActivity extends ComponentActivity {
     protected void onResume() {
         super.onResume();
         activityResumed = true;
+        if (webView == null) createMainWebView();
         if (webView != null) {
+            webView.onResume();
+            if (Build.VERSION.SDK_INT >= 26) webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
             deliverGeneratorState(GeneratorStateStore.read(this));
             webView.evaluateJavascript("window.refreshInputMethodStatus&&window.refreshInputMethodStatus();", null);
         }
@@ -419,6 +454,10 @@ public class MainActivity extends ComponentActivity {
     @Override
     protected void onPause() {
         activityResumed = false;
+        if (webView != null) {
+            webView.onPause();
+            if (Build.VERSION.SDK_INT >= 26) webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true);
+        }
         super.onPause();
     }
 
@@ -439,10 +478,12 @@ public class MainActivity extends ComponentActivity {
         } catch (Exception ignored) {
         }
         if (webView != null) {
+            if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
             webView.removeJavascriptInterface("AndroidBridge");
             webView.destroy();
             webView = null;
         }
+        contentRoot = null;
         super.onDestroy();
     }
 

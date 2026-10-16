@@ -4,11 +4,13 @@ import android.content.Context;
 import android.net.Uri;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
+import androidx.webkit.WebResourceErrorCompat;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -33,7 +35,19 @@ public final class LocalWebContent {
     private LocalWebContent() {
     }
 
+    public interface WebViewLifecycleListener {
+        default void onPageStarted(String url) {}
+        default void onPageFinished(String url) {}
+        default void onMainFrameError(String url, int errorCode, String description) {}
+        default boolean onRenderProcessGone(WebView view, boolean didCrash) { return false; }
+    }
+
     public static WebViewClientCompat createClient(Context context, Runnable pageReady) {
+        return createClient(context, pageReady, null);
+    }
+
+    public static WebViewClientCompat createClient(Context context, Runnable pageReady,
+                                                    WebViewLifecycleListener lifecycleListener) {
         File customRoot = new File(context.getFilesDir(), "assets");
         WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(context))
@@ -41,7 +55,7 @@ public final class LocalWebContent {
                 .addPathHandler("/imports/", new PrivateAssetPathHandler(
                         new File(context.getCacheDir(), "imports"), true))
                 .build();
-        return new LocalClient(loader, pageReady);
+        return new LocalClient(loader, pageReady, lifecycleListener);
     }
 
     static synchronized boolean isImportActive(String name) {
@@ -71,10 +85,13 @@ public final class LocalWebContent {
     private static final class LocalClient extends WebViewClientCompat {
         private final WebViewAssetLoader loader;
         private final Runnable pageReady;
+        private final WebViewLifecycleListener lifecycleListener;
 
-        LocalClient(WebViewAssetLoader loader, Runnable pageReady) {
+        LocalClient(WebViewAssetLoader loader, Runnable pageReady,
+                    WebViewLifecycleListener lifecycleListener) {
             this.loader = loader;
             this.pageReady = pageReady;
+            this.lifecycleListener = lifecycleListener;
         }
 
         @Override
@@ -123,10 +140,12 @@ public final class LocalWebContent {
         @Override
         public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
             releaseImports(view);
+            if (lifecycleListener != null) lifecycleListener.onPageStarted(url);
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
+            if (lifecycleListener != null) lifecycleListener.onPageFinished(url);
             Uri uri = Uri.parse(url);
             if (isAllowed(uri) && ("/assets/mobile.html".equals(uri.getPath())
                     || "/assets/dock.html".equals(uri.getPath())
@@ -134,6 +153,20 @@ public final class LocalWebContent {
                     || "/assets/ime-editor.html".equals(uri.getPath())) && pageReady != null) {
                 pageReady.run();
             }
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceErrorCompat error) {
+            if (lifecycleListener != null && request.isForMainFrame()) {
+                lifecycleListener.onMainFrameError(request.getUrl().toString(), error.getErrorCode(),
+                        error.getDescription() == null ? "" : error.getDescription().toString());
+            }
+        }
+
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            return lifecycleListener != null
+                    && lifecycleListener.onRenderProcessGone(view, detail.didCrash());
         }
 
         private boolean isAllowed(Uri uri) {

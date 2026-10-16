@@ -83,7 +83,7 @@ public final class ThemeChrome {
                 return new Palette(
                         0xff17181d,
                         0xff17181d,
-                        0xff242631,
+                        0xff242628,
                         0xff17181d,
                         Color.WHITE,
                         Color.WHITE,

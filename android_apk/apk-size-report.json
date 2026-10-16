@@ -1,47 +1,47 @@
-﻿{
-    "apk":  "mahou-textbox-0.4.0-release.apk",
-    "apkBytes":  93526704,
-    "generatedAt":  "2026-07-11T03:41:45.4478626Z",
-    "groups":  {
-                   "androidResources":  {
-                                            "files":  44,
-                                            "uncompressedBytes":  185078,
-                                            "compressedBytes":  173902
-                                        },
-                   "builtInBackgrounds":  {
-                                              "files":  16,
-                                              "uncompressedBytes":  37497002,
-                                              "compressedBytes":  37497002
-                                          },
-                   "builtInCharacters":  {
-                                             "files":  100,
-                                             "uncompressedBytes":  47616212,
-                                             "compressedBytes":  47616212
-                                         },
-                   "dex":  {
-                               "files":  1,
-                               "uncompressedBytes":  282432,
-                               "compressedBytes":  129542
-                           },
-                   "fonts":  {
-                                 "files":  1,
-                                 "uncompressedBytes":  12135284,
-                                 "compressedBytes":  8019870
-                             },
-                   "other":  {
-                                 "files":  9,
-                                 "uncompressedBytes":  38582,
-                                 "compressedBytes":  13145
-                             },
-                   "signingMetadata":  {
-                                           "files":  26,
-                                           "uncompressedBytes":  42062,
-                                           "compressedBytes":  19824
-                                       },
-                   "webRuntime":  {
-                                      "files":  8,
-                                      "uncompressedBytes":  94512,
-                                      "compressedBytes":  23119
-                                  }
-               }
+{
+  "apk": "mahou-textbox-0722.apk",
+  "apkBytes": 94490716,
+  "generatedAt": "2026-10-15T14:49:06.9742187Z",
+  "groups": {
+    "androidResources": {
+      "files": 88,
+      "uncompressedBytes": 202572,
+      "compressedBytes": 188840
+    },
+    "builtInBackgrounds": {
+      "files": 16,
+      "uncompressedBytes": 37497002,
+      "compressedBytes": 37497002
+    },
+    "builtInCharacters": {
+      "files": 100,
+      "uncompressedBytes": 47616212,
+      "compressedBytes": 47616212
+    },
+    "dex": {
+      "files": 1,
+      "uncompressedBytes": 349620,
+      "compressedBytes": 161187
+    },
+    "fonts": {
+      "files": 1,
+      "uncompressedBytes": 12135284,
+      "compressedBytes": 8019870
+    },
+    "other": {
+      "files": 9,
+      "uncompressedBytes": 40810,
+      "compressedBytes": 13669
+    },
+    "signingMetadata": {
+      "files": 26,
+      "uncompressedBytes": 52470,
+      "compressedBytes": 24870
+    },
+    "webRuntime": {
+      "files": 25,
+      "uncompressedBytes": 2994496,
+      "compressedBytes": 928671
+    }
+  }
 }

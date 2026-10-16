@@ -1,7 +1,9 @@
 package com.mahou.textbox;
 
 import android.content.Context;
+import android.content.Intent;
 import android.util.Base64;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -18,9 +20,11 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
@@ -29,6 +33,7 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public final class AssetStore {
+    public static final String ACTION_ASSETS_CHANGED = "com.mahou.textbox.ASSETS_CHANGED";
     public static final long MAX_BACKUP_BYTES = 220L * 1024L * 1024L;
     public static final long MAX_TOTAL_ASSET_BYTES = 200L * 1024L * 1024L;
     public static final long MAX_SINGLE_ASSET_BYTES = 20L * 1024L * 1024L;
@@ -37,6 +42,9 @@ public final class AssetStore {
     private static final int BACKUP_VERSION = 1;
     private static final int MAX_BACKUP_ENTRIES = 1000;
     private static final long MAX_MANIFEST_BYTES = 5L * 1024L * 1024L;
+    private static final int MAX_LABEL_LENGTH = 80;
+    private static final int MAX_NAME_BLOCKS = 32;
+    private static final int MAX_NAME_TEXT_LENGTH = 80;
     private static final String ROOT_DIR = "assets";
     private static final String MANIFEST_FILE = "manifest.json";
 
@@ -66,8 +74,8 @@ public final class AssetStore {
             String metadataJson,
             String imageDataUrl
     ) throws IOException, JSONException {
-        JSONObject metadata = new JSONObject(metadataJson);
-        String id = requireId(metadata.optString("id"));
+        JSONObject metadata = parseMetadata(metadataJson);
+        normalizeMetadata(metadata, kind);
         byte[] imageBytes = decodeDataUrl(imageDataUrl);
         if (imageBytes.length == 0) {
             throw new IOException("图片内容为空");
@@ -77,39 +85,12 @@ public final class AssetStore {
         }
 
         ImageFormat format = requireFormat(imageBytes);
-        JSONObject manifest = readManifest(context);
-        JSONArray array = manifest.getJSONArray(arrayName(kind));
-        int existingIndex = findIndex(array, id);
-        File root = rootDir(context);
-        File outputDir = new File(root, directoryName(kind));
-        ensureDirectory(outputDir);
-        File outputFile = new File(outputDir, safeFileName(id) + format.extension);
-
-        long replacedBytes = 0;
-        File previousFile = null;
-        if (existingIndex >= 0) {
-            previousFile = fileFromItem(array.optJSONObject(existingIndex));
-            if (previousFile != null && previousFile.isFile()) {
-                replacedBytes = previousFile.length();
-            }
-        }
-        long projected = totalAssetBytes(root) - replacedBytes + imageBytes.length;
-        if (projected > MAX_TOTAL_ASSET_BYTES) {
-            throw new IOException("自定义素材总容量不能超过 200 MB");
-        }
-
-        writeFileAtomically(outputFile, imageBytes);
-        if (previousFile != null && !sameFile(previousFile, outputFile) && isInsideRoot(root, previousFile)) {
-            deleteQuietly(previousFile);
-        }
-
-        populateFileMetadata(metadata, kind, outputFile, format, imageBytes.length, sha256(imageBytes));
-        if (existingIndex >= 0) {
-            array.put(existingIndex, metadata);
-        } else {
-            array.put(metadata);
-        }
-        writeManifest(context, manifest);
+        JSONObject manifest = readManifestSnapshot(context);
+        File root = new File(context.getFilesDir(), ROOT_DIR);
+        List<AssetChange> changes = new ArrayList<>();
+        changes.add(planAsset(manifest, root, kind, metadata, format,
+                imageBytes.length, sha256(imageBytes), null, imageBytes));
+        commitChanges(context, root, manifest, changes, new ArrayList<>());
         return metadata.toString();
     }
 
@@ -119,34 +100,33 @@ public final class AssetStore {
             String emotionJson,
             String imageDataUrl
     ) throws IOException, JSONException {
-        JSONObject character = new JSONObject(characterJson);
-        String characterId = requireId(character.optString("id"));
-        boolean characterSaved = false;
-        try {
-            String savedCharacter = saveAsset(context, "character", characterJson, imageDataUrl);
-            characterSaved = true;
-            String savedEmotion = saveAsset(context, "emotion", emotionJson, imageDataUrl);
-            return new JSONObject()
-                    .put("character", new JSONObject(savedCharacter))
-                    .put("emotion", new JSONObject(savedEmotion))
-                    .toString();
-        } catch (Exception error) {
-            if (characterSaved) {
-                deleteAsset(context, "character", characterId);
-            }
-            if (error instanceof IOException) {
-                throw (IOException) error;
-            }
-            if (error instanceof JSONException) {
-                throw (JSONException) error;
-            }
-            throw new IOException("角色素材保存失败", error);
+        JSONObject character = parseMetadata(characterJson);
+        JSONObject emotion = parseMetadata(emotionJson);
+        normalizeMetadata(character, "character");
+        normalizeMetadata(emotion, "emotion");
+        if (!character.getString("id").equals(emotion.getString("ownerId"))) {
+            throw new IOException("表情必须属于所保存的角色");
         }
+        byte[] imageBytes = decodeDataUrl(imageDataUrl);
+        if (imageBytes.length == 0 || imageBytes.length > MAX_SINGLE_ASSET_BYTES) {
+            throw new IOException("图片内容为空或超过 20 MB");
+        }
+        ImageFormat format = requireFormat(imageBytes);
+        String hash = sha256(imageBytes);
+        JSONObject manifest = readManifestSnapshot(context);
+        File root = new File(context.getFilesDir(), ROOT_DIR);
+        List<AssetChange> changes = new ArrayList<>();
+        changes.add(planAsset(manifest, root, "character", character, format,
+                imageBytes.length, hash, null, imageBytes));
+        changes.add(planAsset(manifest, root, "emotion", emotion, format,
+                imageBytes.length, hash, null, imageBytes));
+        commitChanges(context, root, manifest, changes, new ArrayList<>());
+        return new JSONObject().put("character", character).put("emotion", emotion).toString();
     }
 
     public static synchronized boolean deleteAsset(Context context, String kind, String id)
             throws IOException, JSONException {
-        JSONObject manifest = readManifest(context);
+        JSONObject manifest = readManifestSnapshot(context);
         JSONArray array = manifest.getJSONArray(arrayName(kind));
         int index = findIndex(array, id);
         if (index < 0) {
@@ -157,27 +137,28 @@ public final class AssetStore {
             return false;
         }
 
-        File root = rootDir(context);
-        deleteItemFile(root, item);
+        File root = new File(context.getFilesDir(), ROOT_DIR);
+        List<File> removed = new ArrayList<>();
+        removed.add(fileFromItem(item));
         array.remove(index);
         if ("character".equals(kind)) {
             JSONArray emotions = manifest.getJSONArray("emotions");
             for (int i = emotions.length() - 1; i >= 0; i--) {
                 JSONObject emotion = emotions.optJSONObject(i);
                 if (emotion != null && id.equals(emotion.optString("ownerId"))) {
-                    deleteItemFile(root, emotion);
+                    removed.add(fileFromItem(emotion));
                     emotions.remove(i);
                 }
             }
         }
-        writeManifest(context, manifest);
+        commitChanges(context, root, manifest, new ArrayList<>(), removed);
         return true;
     }
 
     public static synchronized String updateAsset(Context context, String id, String metadataJson)
             throws IOException, JSONException {
-        JSONObject patch = new JSONObject(metadataJson);
-        JSONObject manifest = readManifest(context);
+        JSONObject patch = parseMetadata(metadataJson);
+        JSONObject manifest = readManifestSnapshot(context);
         for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
             JSONArray array = manifest.getJSONArray(name);
             int index = findIndex(array, id);
@@ -188,7 +169,10 @@ public final class AssetStore {
             merge(current, patch);
             current.put("id", id);
             array.put(index, current);
+            validateCatalog(manifest);
+            manifestBytes(manifest);
             writeManifest(context, manifest);
+            notifyAssetsChanged(context);
             return current.toString();
         }
         throw new IOException("未找到要更新的素材");
@@ -196,52 +180,77 @@ public final class AssetStore {
 
     public static synchronized String exportBackup(Context context, OutputStream output, String settingsJson)
             throws IOException, JSONException {
-        JSONObject manifest = readManifest(context);
+        JSONObject manifest = readManifestSnapshot(context);
+        validateCatalog(manifest);
+        manifestBytes(manifest);
         JSONObject backup = new JSONObject()
                 .put("formatVersion", BACKUP_VERSION)
                 .put("appVersion", BuildConfig.VERSION_NAME)
                 .put("createdAt", isoTimestamp())
                 .put("settings", parseObjectOrEmpty(settingsJson));
 
-        try (ZipOutputStream zip = new ZipOutputStream(output)) {
-            int exported = 0;
-            for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
-                JSONArray source = manifest.getJSONArray(name);
-                JSONArray target = new JSONArray();
-                String kind = singularName(name);
-                for (int i = 0; i < source.length(); i++) {
-                    JSONObject item = source.optJSONObject(i);
-                    if (item == null || !item.optBoolean("custom", false)) {
-                        continue;
-                    }
-                    File file = fileFromItem(item);
-                    if (file == null || !file.isFile() || !isInsideRoot(rootDir(context), file)) {
-                        throw new IOException("素材文件缺失：" + item.optString("label", item.optString("id")));
-                    }
-                    ImageFormat format = requireFormat(readHeader(file));
-                    String entryName = "assets/" + kind + "/" + safeFileName(item.optString("id")) + format.extension;
-                    JSONObject copy = new JSONObject(item.toString());
-                    copy.remove("path");
-                    copy.remove("src");
-                    copy.put("file", entryName);
-                    copy.put("mime", format.mime);
-                    copy.put("size", file.length());
-                    copy.put("sha256", sha256(file));
-                    target.put(copy);
-                    addFileToZip(zip, entryName, file);
-                    exported++;
+        File root = new File(context.getFilesDir(), ROOT_DIR);
+        JSONObject restored = emptyManifest();
+        List<File> files = new ArrayList<>();
+        List<String> entries = new ArrayList<>();
+        long totalBytes = 0;
+        for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
+            JSONArray source = manifest.getJSONArray(name);
+            JSONArray target = new JSONArray();
+            String kind = singularName(name);
+            for (int i = 0; i < source.length(); i++) {
+                JSONObject item = source.optJSONObject(i);
+                if (item == null || !item.optBoolean("custom", false)) {
+                    continue;
                 }
-                backup.put(name, target);
+                if (files.size() + 2 > MAX_BACKUP_ENTRIES) {
+                    throw new IOException("备份条目不能超过 1000 个（含索引）");
+                }
+                File file = fileFromItem(item);
+                if (file == null || !file.isFile() || !isInsideRoot(root, file)) {
+                    throw new IOException("素材文件缺失：" + item.optString("label", item.optString("id")));
+                }
+                totalBytes += file.length();
+                if (file.length() > MAX_SINGLE_ASSET_BYTES || totalBytes > MAX_TOTAL_ASSET_BYTES) {
+                    throw new IOException("备份素材超过单张 20 MB 或总量 200 MB 限制");
+                }
+                ImageFormat format = requireFormat(readHeader(file));
+                String entryName = "assets/" + kind + "/" + safeFileName(item.optString("id")) + format.extension;
+                if (!isSafeEntry(entryName)) throw new IOException("素材无法使用安全备份路径");
+                JSONObject copy = new JSONObject(item.toString());
+                copy.remove("path");
+                copy.remove("src");
+                copy.put("file", entryName);
+                copy.put("mime", format.mime);
+                copy.put("size", file.length());
+                copy.put("sha256", sha256(file));
+                target.put(copy);
+                files.add(file);
+                entries.add(entryName);
+                JSONObject normalized = new JSONObject(copy.toString());
+                normalized.remove("file");
+                populateFileMetadata(normalized, kind,
+                        new File(new File(root, name), safeFileName(item.getString("id")) + format.extension),
+                        format, file.length(), copy.getString("sha256"));
+                restored.getJSONArray(name).put(normalized);
             }
-            byte[] index = backup.toString().getBytes(StandardCharsets.UTF_8);
+            backup.put(name, target);
+        }
+        validateCatalog(restored);
+        manifestBytes(restored);
+        byte[] index = manifestBytes(backup);
+        try (ZipOutputStream zip = new ZipOutputStream(new LimitedOutputStream(output, MAX_BACKUP_BYTES))) {
+            for (int i = 0; i < files.size(); i++) {
+                addFileToZip(zip, entries.get(i), files.get(i));
+            }
             zip.putNextEntry(new ZipEntry("backup.json"));
             zip.write(index);
             zip.closeEntry();
             zip.finish();
             return new JSONObject()
                     .put("status", "success")
-                    .put("exportedCount", exported)
-                    .put("message", "已备份 " + exported + " 个自定义素材")
+                    .put("exportedCount", files.size())
+                    .put("message", "已备份 " + files.size() + " 个自定义素材")
                     .toString();
         }
     }
@@ -250,8 +259,6 @@ public final class AssetStore {
             throws IOException, JSONException {
         File filesDir = context.getFilesDir();
         File extracted = new File(filesDir, "assets-import-" + System.currentTimeMillis());
-        File merged = new File(filesDir, "assets-merge-" + System.currentTimeMillis());
-        File rollback = new File(filesDir, "assets-rollback-" + System.currentTimeMillis());
         ensureDirectory(extracted);
         try {
             extractBackup(input, extracted);
@@ -267,33 +274,36 @@ public final class AssetStore {
                 throw new IOException("不支持的备份格式版本");
             }
 
-            File currentRoot = rootDir(context);
-            JSONObject mergedManifest = new JSONObject(readManifest(context).toString());
-            long currentBytes = totalAssetBytes(currentRoot);
-            long replacedBytes = 0;
-            long importedBytes = 0;
+            ensureImportArrays(backup);
+            if (backup.has("settings") && backup.optJSONObject("settings") == null) {
+                throw new IOException("备份设置必须是对象");
+            }
+            File currentRoot = new File(filesDir, ROOT_DIR);
+            JSONObject mergedManifest = readManifestSnapshot(context);
             int importedCount = 0;
             int overwrittenCount = 0;
+            Set<String> incomingIds = new HashSet<>();
+            Set<String> incomingFiles = new HashSet<>();
+            List<AssetChange> changes = new ArrayList<>();
 
-            ensureDirectory(merged);
-            copyAssetTree(currentRoot, merged);
             for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
-                JSONArray incoming = backup.optJSONArray(name);
-                if (incoming == null) {
-                    incoming = new JSONArray();
-                }
+                JSONArray incoming = backup.getJSONArray(name);
                 JSONArray destination = mergedManifest.getJSONArray(name);
                 String kind = singularName(name);
-                File destinationDir = new File(merged, name);
-                ensureDirectory(destinationDir);
                 for (int i = 0; i < incoming.length(); i++) {
                     JSONObject item = incoming.optJSONObject(i);
                     if (item == null) {
                         throw new IOException("备份素材索引无效");
                     }
-                    String id = requireId(item.optString("id"));
-                    String entryName = item.optString("file", "");
-                    if (!isSafeEntry(entryName) || !entryName.startsWith("assets/" + kind + "/")) {
+                    JSONObject normalized = new JSONObject(item.toString());
+                    normalizeMetadata(normalized, kind);
+                    String id = normalized.getString("id");
+                    if (!incomingIds.add(id)) {
+                        throw new IOException("备份包含重复素材 ID：" + id);
+                    }
+                    String entryName = requiredString(item, "file");
+                    if (!isSafeEntry(entryName) || !entryName.startsWith("assets/" + kind + "/")
+                            || !incomingFiles.add(entryName)) {
                         throw new IOException("备份素材路径无效");
                     }
                     File staged = new File(extracted, entryName).getCanonicalFile();
@@ -305,52 +315,23 @@ public final class AssetStore {
                     }
                     ImageFormat format = requireFormat(readHeader(staged));
                     String actualHash = sha256(staged);
-                    if (!actualHash.equalsIgnoreCase(item.optString("sha256", ""))) {
+                    if (!actualHash.equalsIgnoreCase(requiredString(item, "sha256"))) {
                         throw new IOException("素材校验失败：" + id);
                     }
 
                     int existing = findIndex(destination, id);
-                    File previousMergedFile = null;
                     if (existing >= 0) {
-                        File old = fileFromItem(destination.optJSONObject(existing));
-                        if (old != null && old.isFile()) {
-                            replacedBytes += old.length();
-                            previousMergedFile = new File(destinationDir, old.getName());
-                        }
                         overwrittenCount++;
                     }
-                    importedBytes += staged.length();
                     importedCount++;
-
-                    File outputFile = new File(destinationDir, safeFileName(id) + format.extension);
-                    copyFile(staged, outputFile);
-                    if (previousMergedFile != null && !sameFile(previousMergedFile, outputFile)) {
-                        deleteQuietly(previousMergedFile);
-                    }
-                    JSONObject normalized = new JSONObject(item.toString());
                     normalized.remove("file");
-                    populateFileMetadata(
-                            normalized,
-                            kind,
-                            new File(new File(currentRoot, name), outputFile.getName()),
-                            format,
-                            outputFile.length(),
-                            actualHash
-                    );
-                    if (existing >= 0) {
-                        destination.put(existing, normalized);
-                    } else {
-                        destination.put(normalized);
-                    }
+                    changes.add(planAsset(mergedManifest, currentRoot, kind, normalized, format,
+                            staged.length(), actualHash, staged, null));
                 }
             }
 
-            if (currentBytes - replacedBytes + importedBytes > MAX_TOTAL_ASSET_BYTES) {
-                throw new IOException("恢复后素材总量将超过 200 MB");
-            }
             mergedManifest.put("version", MANIFEST_VERSION);
-            writeManifestFile(merged, mergedManifest);
-            commitImportedTree(currentRoot, merged, rollback);
+            commitChanges(context, currentRoot, mergedManifest, changes, new ArrayList<>());
 
             JSONObject result = new JSONObject()
                     .put("status", "success")
@@ -363,8 +344,6 @@ public final class AssetStore {
             return result.toString();
         } finally {
             deleteRecursively(extracted);
-            deleteRecursively(merged);
-            deleteRecursively(rollback);
         }
     }
 
@@ -377,6 +356,9 @@ public final class AssetStore {
             return empty;
         }
         JSONObject manifest;
+        if (manifestFile.length() > MAX_MANIFEST_BYTES) {
+            throw new IOException("素材索引超过 5 MB，原文件已保留");
+        }
         try {
             manifest = new JSONObject(new String(
                     readAllBytes(manifestFile, MAX_MANIFEST_BYTES),
@@ -395,10 +377,217 @@ public final class AssetStore {
         return manifest;
     }
 
+    private static JSONObject readManifestSnapshot(Context context) throws IOException, JSONException {
+        File root = new File(context.getFilesDir(), ROOT_DIR);
+        if (!root.exists() && findRecoveryTree(context) != null) {
+            throw new IOException("素材恢复事务待回滚，请先重新读取素材");
+        }
+        File file = new File(root, MANIFEST_FILE);
+        if (!file.isFile()) return emptyManifest();
+        JSONObject manifest = new JSONObject(new String(readAllBytes(file, MAX_MANIFEST_BYTES), StandardCharsets.UTF_8));
+        ensureImportArrays(manifest);
+        return manifest;
+    }
+
+    private static JSONObject parseMetadata(String json) throws IOException, JSONException {
+        if (json == null || json.getBytes(StandardCharsets.UTF_8).length > MAX_MANIFEST_BYTES) {
+            throw new IOException("素材元数据不能超过 5 MB");
+        }
+        return new JSONObject(json);
+    }
+
+    private static byte[] manifestBytes(JSONObject manifest) throws IOException {
+        byte[] bytes = manifest.toString().getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_MANIFEST_BYTES) throw new IOException("素材索引不能超过 5 MB");
+        return bytes;
+    }
+
+    private static String requiredString(JSONObject object, String key) throws IOException {
+        Object value = object.opt(key);
+        if (!(value instanceof String)) throw new IOException("素材字段必须是字符串：" + key);
+        return (String) value;
+    }
+
+    private static String boundedString(JSONObject object, String key, String fallback, int max) throws IOException {
+        String value = object.has(key) ? requiredString(object, key) : fallback;
+        if (value.codePointCount(0, value.length()) > max) {
+            throw new IOException("素材字段过长：" + key);
+        }
+        return value;
+    }
+
+    private static double boundedNumber(JSONObject object, String key, double fallback, double min, double max)
+            throws IOException {
+        Object value = object.has(key) ? object.opt(key) : fallback;
+        if (!(value instanceof Number)) throw new IOException("素材字段必须是数字：" + key);
+        double number = ((Number) value).doubleValue();
+        if (Double.isNaN(number) || Double.isInfinite(number) || number < min || number > max) {
+            throw new IOException("素材数字字段越界：" + key);
+        }
+        return number;
+    }
+
+    private static void normalizeMetadata(JSONObject item, String kind) throws IOException, JSONException {
+        arrayName(kind);
+        String id = requireId(requiredString(item, "id"));
+        item.put("id", id);
+        if (item.has("kind") && !kind.equals(requiredString(item, "kind"))) {
+            throw new IOException("素材类型与所属数组不一致");
+        }
+        String label = boundedString(item, "label", id.substring(0, Math.min(id.length(), MAX_LABEL_LENGTH)), MAX_LABEL_LENGTH);
+        item.put("label", label);
+        item.put("order", boundedNumber(item, "order", 0, 0, Long.MAX_VALUE));
+        String owner = boundedString(item, "ownerId", "", 128);
+        if ("emotion".equals(kind)) {
+            owner = requireId(owner);
+        } else if (!owner.isEmpty()) {
+            throw new IOException("只有表情素材可以设置所属角色");
+        }
+        item.put("ownerId", owner);
+        if (!"character".equals(kind)) {
+            if (item.has("fit") || item.has("nameBlocks")) {
+                throw new IOException("只有角色素材可以设置定位和姓名字块");
+            }
+            return;
+        }
+        JSONObject fit = item.has("fit") ? item.optJSONObject("fit") : new JSONObject();
+        if (fit == null) throw new IOException("角色定位必须是对象");
+        fit.put("x", boundedNumber(fit, "x", 0, 0, 2560));
+        fit.put("y", boundedNumber(fit, "y", 134, 0, 834));
+        fit.put("w", boundedNumber(fit, "w", 720, 1, 2560));
+        fit.put("h", boundedNumber(fit, "h", 700, 1, 834));
+        item.put("fit", fit);
+        JSONArray blocks = item.has("nameBlocks") ? item.optJSONArray("nameBlocks")
+                : new JSONArray().put(new JSONObject().put("text", label));
+        if (blocks == null || blocks.length() > MAX_NAME_BLOCKS) {
+            throw new IOException("姓名字块必须是数组且不能超过 32 个");
+        }
+        Set<String> blockIds = new HashSet<>();
+        for (int i = 0; i < blocks.length(); i++) {
+            JSONObject block = blocks.optJSONObject(i);
+            if (block == null) throw new IOException("姓名字块必须是对象");
+            String blockId = requireId(boundedString(block, "id", "name-" + i, 128));
+            if (!blockIds.add(blockId)) throw new IOException("姓名字块 ID 重复");
+            block.put("id", blockId);
+            block.put("text", boundedString(block, "text", "", MAX_NAME_TEXT_LENGTH));
+            block.put("x", boundedNumber(block, "x", 759, 0, 2560));
+            block.put("y", boundedNumber(block, "y", 73, 0, 834));
+            block.put("size", boundedNumber(block, "size", 150, 20, 400));
+            String color = boundedString(block, "color", "#ffffff", 7);
+            if (!color.matches("#[A-Fa-f0-9]{6}")) throw new IOException("姓名字块颜色无效");
+            block.put("color", color);
+        }
+        item.put("nameBlocks", blocks);
+    }
+
+    private static void ensureImportArrays(JSONObject manifest) throws IOException, JSONException {
+        for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
+            if (!manifest.has(name)) manifest.put(name, new JSONArray());
+            else if (manifest.optJSONArray(name) == null) throw new IOException("素材列表必须是数组：" + name);
+        }
+    }
+
+    private static void validateCatalog(JSONObject manifest) throws IOException, JSONException {
+        ensureImportArrays(manifest);
+        Set<String> ids = new HashSet<>();
+        Set<String> owners = new HashSet<>();
+        for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
+            JSONArray array = manifest.getJSONArray(name);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject item = array.optJSONObject(i);
+                if (item == null) throw new IOException("素材索引必须是对象");
+                normalizeMetadata(item, singularName(name));
+                String id = item.getString("id");
+                if (!ids.add(id)) throw new IOException("素材 ID 重复：" + id);
+                if ("characters".equals(name)) owners.add(id);
+            }
+        }
+        JSONArray emotions = manifest.getJSONArray("emotions");
+        for (int i = 0; i < emotions.length(); i++) {
+            if (!owners.contains(emotions.getJSONObject(i).getString("ownerId"))) {
+                throw new IOException("表情所属角色不存在");
+            }
+        }
+    }
+
+    private static AssetChange planAsset(JSONObject manifest, File root, String kind, JSONObject metadata,
+            ImageFormat format, long size, String hash, File source, byte[] bytes) throws IOException, JSONException {
+        JSONArray array = manifest.getJSONArray(arrayName(kind));
+        String id = metadata.getString("id");
+        int existing = findIndex(array, id);
+        File previous = existing < 0 ? null : fileFromItem(array.optJSONObject(existing));
+        File output = new File(new File(root, directoryName(kind)), safeFileName(id) + format.extension);
+        populateFileMetadata(metadata, kind, output, format, size, hash);
+        if (existing < 0) array.put(metadata);
+        else array.put(existing, metadata);
+        return new AssetChange(output, previous, source, bytes, size);
+    }
+
+    private static File stagedFile(File root, File stagedRoot, File file) throws IOException {
+        if (!isInsideRoot(root, file)) throw new IOException("素材文件路径越界");
+        return new File(stagedRoot, file.getCanonicalPath().substring(root.getCanonicalPath().length() + 1));
+    }
+
+    private static void commitChanges(Context context, File root, JSONObject manifest,
+            List<AssetChange> changes, List<File> removed) throws IOException, JSONException {
+        validateCatalog(manifest);
+        manifest.put("version", MANIFEST_VERSION);
+        manifestBytes(manifest);
+        long projected = totalAssetBytes(root);
+        for (AssetChange change : changes) {
+            if (change.previous != null) {
+                stagedFile(root, root, change.previous);
+                projected -= change.previous.length();
+            }
+            projected += change.size;
+        }
+        for (File file : removed) {
+            if (file != null) {
+                stagedFile(root, root, file);
+                projected -= file.length();
+            }
+        }
+        if (projected > MAX_TOTAL_ASSET_BYTES) throw new IOException("素材总量不能超过 200 MB");
+        File staged = new File(context.getFilesDir(), "assets-merge-" + System.nanoTime());
+        File rollback = new File(context.getFilesDir(), "assets-rollback-" + System.nanoTime());
+        try {
+            copyAssetTree(root, staged);
+            for (AssetChange change : changes) {
+                File target = stagedFile(root, staged, change.output);
+                ensureDirectory(target.getParentFile());
+                if (change.source == null) writeBytesAndSync(target, change.bytes);
+                else copyFile(change.source, target);
+                if (change.previous != null && !sameFile(change.previous, change.output)) {
+                    deleteQuietly(stagedFile(root, staged, change.previous));
+                }
+            }
+            for (File file : removed) {
+                if (file != null) deleteQuietly(stagedFile(root, staged, file));
+            }
+            if (totalAssetBytes(staged) > MAX_TOTAL_ASSET_BYTES) throw new IOException("素材总量不能超过 200 MB");
+            writeManifestFile(staged, manifest);
+            commitImportedTree(root, staged, rollback);
+            notifyAssetsChanged(context);
+        } finally {
+            deleteRecursively(staged);
+            // commitImportedTree alone owns rollback cleanup; it may contain the only original copy.
+        }
+    }
+
+    private static void notifyAssetsChanged(Context context) {
+        try {
+            context.sendBroadcast(new Intent(ACTION_ASSETS_CHANGED).setPackage(context.getPackageName()));
+        } catch (RuntimeException error) {
+            // Observer failures must not turn an already committed transaction into a reported failure.
+            Log.w("MahouAssets", "Asset change notification failed", error);
+        }
+    }
+
     private static boolean migrateManifest(Context context, JSONObject manifest)
             throws IOException, JSONException {
         boolean changed = manifest.optInt("version", 1) != MANIFEST_VERSION;
         File root = rootDir(context);
+        List<File[]> moves = new ArrayList<>();
         for (String name : new String[]{"backgrounds", "characters", "emotions"}) {
             JSONArray array = manifest.getJSONArray(name);
             String kind = singularName(name);
@@ -418,27 +607,28 @@ public final class AssetStore {
                     if (target.exists() && !sameFile(source, target)) {
                         target = uniqueMigrationTarget(source.getParentFile(), safeFileName(item.optString("id")), format.extension);
                     }
-                    if (!source.renameTo(target)) {
-                        copyFile(source, target);
-                        if (!source.delete()) {
-                            deleteQuietly(target);
-                            continue;
-                        }
-                    }
-                    source = target;
+                    moves.add(new File[]{source, target});
                     changed = true;
                 }
                 String hash = sha256(source);
                 if (!format.mime.equals(item.optString("mime"))
                         || item.optLong("size", -1) != source.length()
                         || !hash.equalsIgnoreCase(item.optString("sha256", ""))
-                        || !srcFor(kind, source).equals(item.optString("src"))) {
-                    populateFileMetadata(item, kind, source, format, source.length(), hash);
+                        || !srcFor(kind, target).equals(item.optString("src"))
+                        || !target.getAbsolutePath().equals(item.optString("path"))) {
+                    populateFileMetadata(item, kind, target, format, source.length(), hash);
                     changed = true;
                 }
             }
         }
         manifest.put("version", MANIFEST_VERSION);
+        manifestBytes(manifest);
+        for (File[] move : moves) {
+            if (!move[0].renameTo(move[1])) {
+                copyFile(move[0], move[1]);
+                if (!move[0].delete()) throw new IOException("无法迁移素材文件");
+            }
+        }
         return changed;
     }
 
@@ -479,7 +669,11 @@ public final class AssetStore {
     }
 
     private static void commitImportedTree(File current, File merged, File rollback) throws IOException {
-        deleteRecursively(rollback);
+        if (rollback.exists()) throw new IOException("素材回滚目录已存在，原目录已保留");
+        if (!current.exists()) {
+            if (!merged.renameTo(current)) throw new IOException("无法安装素材恢复事务");
+            return;
+        }
         if (!current.renameTo(rollback)) {
             throw new IOException("无法准备素材恢复事务");
         }
@@ -526,31 +720,18 @@ public final class AssetStore {
     }
 
     private static void writeManifestFile(File root, JSONObject manifest) throws IOException {
+        byte[] bytes = manifestBytes(manifest);
         ensureDirectory(root);
         File target = new File(root, MANIFEST_FILE);
         File temp = new File(root, MANIFEST_FILE + ".tmp");
         File backup = new File(root, MANIFEST_FILE + ".bak");
-        writeBytesAndSync(temp, manifest.toString().getBytes(StandardCharsets.UTF_8));
+        writeBytesAndSync(temp, bytes);
         if (target.isFile()) {
             copyFile(target, backup);
         }
         if (target.exists() && !target.delete()) {
             deleteQuietly(temp);
             throw new IOException("无法替换素材索引");
-        }
-        if (!temp.renameTo(target)) {
-            copyFile(temp, target);
-            deleteQuietly(temp);
-        }
-    }
-
-    private static void writeFileAtomically(File target, byte[] bytes) throws IOException {
-        ensureDirectory(target.getParentFile());
-        File temp = new File(target.getParentFile(), target.getName() + ".tmp");
-        writeBytesAndSync(temp, bytes);
-        if (target.exists() && !target.delete()) {
-            deleteQuietly(temp);
-            throw new IOException("无法替换素材文件");
         }
         if (!temp.renameTo(target)) {
             copyFile(temp, target);
@@ -701,17 +882,29 @@ public final class AssetStore {
         return path.isEmpty() ? null : new File(path);
     }
 
-    private static void deleteItemFile(File root, JSONObject item) throws IOException {
-        File file = fileFromItem(item);
-        if (file != null && isInsideRoot(root, file)) {
-            deleteQuietly(file);
-        }
-    }
-
     private static File rootDir(Context context) throws IOException {
         File root = new File(context.getFilesDir(), ROOT_DIR);
+        if (!root.exists()) {
+            File recovery = findRecoveryTree(context);
+            if (recovery != null && !recovery.renameTo(root)) {
+                throw new IOException("无法自动回滚，原素材保留在：" + recovery.getAbsolutePath());
+            }
+        }
         ensureDirectory(root);
         return root;
+    }
+
+    private static File findRecoveryTree(Context context) throws IOException {
+        File[] candidates = context.getFilesDir().listFiles((dir, name) -> name.startsWith("assets-rollback-"));
+        File recovery = null;
+        if (candidates != null) {
+            for (File candidate : candidates) {
+                if (!new File(candidate, MANIFEST_FILE).isFile()) continue;
+                if (recovery != null) throw new IOException("存在多个素材恢复目录，请保留并人工恢复");
+                recovery = candidate;
+            }
+        }
+        return recovery;
     }
 
     private static long totalAssetBytes(File root) {
@@ -916,6 +1109,60 @@ public final class AssetStore {
         ImageFormat(String extension, String mime) {
             this.extension = extension;
             this.mime = mime;
+        }
+    }
+
+    private static final class AssetChange {
+        final File output;
+        final File previous;
+        final File source;
+        final byte[] bytes;
+        final long size;
+
+        AssetChange(File output, File previous, File source, byte[] bytes, long size) {
+            this.output = output;
+            this.previous = previous;
+            this.source = source;
+            this.bytes = bytes;
+            this.size = size;
+        }
+    }
+
+    private static final class LimitedOutputStream extends OutputStream {
+        private final OutputStream output;
+        private final long limit;
+        private long count;
+
+        LimitedOutputStream(OutputStream output, long limit) {
+            this.output = output;
+            this.limit = limit;
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            reserve(1);
+            output.write(value);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            reserve(length);
+            output.write(bytes, offset, length);
+        }
+
+        private void reserve(int length) throws IOException {
+            if (length > limit - count) throw new IOException("备份文件不能超过 220 MB");
+            count += length;
+        }
+
+        @Override
+        public void flush() throws IOException {
+            output.flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            output.close();
         }
     }
 

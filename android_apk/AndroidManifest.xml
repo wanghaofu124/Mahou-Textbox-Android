@@ -6,13 +6,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
     <queries>
         <package android:name="com.tencent.mobileqq" />
         <package android:name="com.tencent.tim" />
+        <intent><action android:name="android.view.InputMethod" /></intent>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
 
     <application
+        android:enableOnBackInvokedCallback="true"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
@@ -39,10 +44,28 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
 
+
         <activity
             android:name=".AssetTransferActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
+
+        <activity
+            android:name=".ImeEditorActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.mahou.textbox.caption"
+            android:theme="@style/ImeEditorTheme"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
+
+        <activity
+            android:name=".ImeReturnActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.mahou.textbox.ime_return"
+            android:theme="@style/ImeReturnTheme" />
 
         <activity
             android:name=".ShareProxyActivity"
@@ -50,6 +73,13 @@
             android:exported="false"
             android:finishOnTaskLaunch="true"
             android:theme="@style/TransparentShareTheme" />
+
+        <service android:name=".MahouInputMethodService"
+            android:label="@string/ime_name" android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/input_method" />
+        </service>
 
         <service
             android:name=".PopupService"

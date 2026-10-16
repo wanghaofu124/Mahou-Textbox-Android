@@ -1,0 +1,35 @@
+<!doctype html>
+  <html lang="zh-CN" data-theme="dark" class="ime-mode">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none';script-src 'self';worker-src 'self';style-src 'self' 'unsafe-inline';img-src 'self' data: blob:;font-src 'self';connect-src 'self';object-src 'none';base-uri 'none';form-action 'none'" />
+    <title>魔裁图片输入法</title>
+    <script src="theme-bootstrap.js"></script>
+    <link rel="stylesheet" href="mobile.css" /><link rel="stylesheet" href="ime.css" />
+  </head>
+  <body>
+    <main class="workspace" aria-label="魔裁图片输入法">
+      <header class="ime-toolbar"><strong>图片</strong><output id="inputTargetStatus" aria-live="polite">魔裁</output><button id="randomButton" type="button" class="icon-button" aria-label="随机表情与背景" title="随机"><i data-lucide="shuffle"></i></button><button id="imeEditorButton" type="button" class="icon-button" aria-label="打开主界面" title="主界面"><i data-lucide="sliders-horizontal"></i></button><button id="hideImeButton" type="button" class="icon-button" aria-label="收起键盘" title="收起"><i data-lucide="chevron-down"></i></button><button id="previousKeyboardButton" type="button" class="ime-text-button" aria-label="切换到原来的键盘">键盘</button></header>
+      <div class="workspace-content">
+        <section class="preview-wrap" aria-label="当前台词图片预览"><div class="preview-stage"><canvas id="preview" width="2560" height="834"></canvas><div id="imeDraft" class="ime-draft" role="textbox" aria-multiline="true" tabindex="0" hidden></div></div></section>
+        <section class="selection-row" aria-label="素材选择">
+          <div class="selector"><button id="characterPrev" type="button" class="step-button" aria-label="上一个角色">‹</button><button id="pickCharacter" class="selection-button" type="button" aria-label="选择角色"><img id="currentCharacterThumb" alt="" /><span><small>角色</small><output id="characterLabel"></output></span></button><button id="characterNext" type="button" class="step-button" aria-label="下一个角色">›</button></div>
+          <div class="selector"><button id="emotionPrev" type="button" class="step-button" aria-label="上一个表情">‹</button><button id="pickEmotion" class="selection-button" type="button" aria-label="选择表情"><img id="currentEmotionThumb" alt="" /><span><small>表情</small><output id="emotionLabel"></output></span></button><button id="emotionNext" type="button" class="step-button" aria-label="下一个表情">›</button></div>
+          <div class="selector"><button id="backgroundPrev" type="button" class="step-button" aria-label="上一个背景">‹</button><button id="pickBackground" class="selection-button" type="button" aria-label="选择背景"><img id="currentBackgroundThumb" alt="" /><span><small>背景</small><output id="backgroundLabel"></output></span></button><button id="backgroundNext" type="button" class="step-button" aria-label="下一个背景">›</button></div>
+        </section>
+      </div>
+      <footer class="sendbar">
+        <button id="readDraftButton" type="button" aria-label="读取当前聊天草稿，保留原文"><i data-lucide="text-cursor-input"></i><span>读取草稿</span></button>
+        <button id="qqButton" type="button" class="primary" aria-label="把图片放进当前 QQ 输入框"><i data-lucide="send"></i><span>放入 QQ</span></button>
+        <button id="shareButton" type="button" class="icon-button" aria-label="复制图片" title="复制图片"><i data-lucide="copy"></i></button>
+      </footer>
+      <div hidden aria-hidden="true">
+        <textarea id="lineText" readonly maxlength="180">今天的群聊，开始整活。</textarea>
+        <select id="characterSelect"></select><select id="emotionSelect"></select><select id="backgroundSelect"></select>
+        <button id="addBackgroundButton" type="button"></button><button data-keyboard-done type="button"></button>
+      </div>
+    </main>
+    <script src="icons/lucide.min.js"></script><script src="generator-state.js"></script><script src="mobile.js"></script><script src="workspace.js"></script><script src="ime.js"></script>
+  </body>
+</html>

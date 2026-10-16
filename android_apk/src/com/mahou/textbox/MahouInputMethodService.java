@@ -1,0 +1,693 @@
+package com.mahou.textbox;
+
+import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.inputmethodservice.InputMethodService;
+import android.net.Uri;
+import android.database.ContentObserver;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.text.InputType;
+import android.view.KeyEvent;
+import android.view.View;
+import android.util.Log;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.ExtractedText;
+import android.view.inputmethod.ExtractedTextRequest;
+import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputContentInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.content.ClipDescription;
+import android.content.ContentValues;
+import android.os.Environment;
+import android.provider.MediaStore;
+import java.io.FileInputStream;
+import java.io.OutputStream;
+import androidx.core.app.NotificationManagerCompat;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.widget.FrameLayout;
+import android.widget.Toast;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import org.json.JSONObject;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class MahouInputMethodService extends InputMethodService {
+    private static MahouInputMethodService active;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private static final long OFFER_KEEP_MS = 90_000L;
+    private WebView webView;
+    private Uri offeredImage;
+    private int offerGeneration;
+    private final Runnable dropOfferedImage = this::dropOfferedImageNow;
+    private boolean destroyed, inputActive, exportBusy, switchingKeyboard;
+    private long inputSession;
+    private String fieldKey = "";
+    private String typedMirror = "";
+    private String pendingSendUrl = "";
+    private String captionEditorTarget = "";
+    private volatile boolean pendingCaptionSend;
+    private int captionSendWaits;
+    private final Runnable continueCaptionSend = new Runnable() {
+        @Override public void run() {
+            if (!pendingCaptionSend || destroyed) return;
+            EditorInfo info = getCurrentInputEditorInfo();
+            String target = info == null || info.packageName == null ? "" : info.packageName;
+            if (!inputActive || !QqSendAccessibilityService.isTarget(target) || !captionEditorTarget.equals(target)) {
+                if (++captionSendWaits >= 100) {
+                    pendingCaptionSend = false;
+                    captionSendWaits = 0;
+                    notice("未能返回原聊天输入框，请重新点“发到 QQ”", 3600);
+                } else main.postDelayed(this, 120);
+                return;
+            }
+            pendingCaptionSend = false;
+            captionSendWaits = 0;
+            evaluate("window.sendCurrentImageToQQ&&window.sendCurrentImageToQQ();");
+        }
+    };
+    private final ContentObserver accessibilitySetting = new ContentObserver(main) {
+        @Override public void onChange(boolean selfChange) { deliverTarget(); }
+    };
+    private final BroadcastReceiver changes = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (AssetStore.ACTION_ASSETS_CHANGED.equals(intent.getAction()))
+                evaluate("window.receiveAssetsChanged&&window.receiveAssetsChanged();");
+            else if (GeneratorStateStore.ACTION_STATE_CHANGED.equals(intent.getAction())) {
+                if (isInputViewShown()) deliverState();
+            }
+            else if (InputMethodSupport.ACTION_MODE_CHANGED.equals(intent.getAction())) {
+                requestHideSelf(0);
+                deliverTarget();
+            } else if (QqSendAccessibilityService.ACTION_RESULT.equals(intent.getAction())) {
+                evaluate("window.receiveDirectSendResult&&window.receiveDirectSendResult("
+                        + JSONObject.quote(intent.getStringExtra("result")) + ");");
+                deliverTarget();
+            } else deliverState();
+        }
+    };
+
+    static void leaveForTextKeyboard() {
+        MahouInputMethodService service = active;
+        if (service != null) service.main.post(() -> service.previousKeyboard(true));
+    }
+
+    static boolean queueCaptionSendAfterEditor() {
+        MahouInputMethodService service = active;
+        if (service == null || service.destroyed || !QqSendAccessibilityService.isTarget(service.captionEditorTarget)) return false;
+        service.pendingCaptionSend = true;
+        service.captionSendWaits = 0;
+        service.main.removeCallbacks(service.continueCaptionSend);
+        service.main.postDelayed(service.continueCaptionSend, 180);
+        return true;
+    }
+
+    @Override public void onCreate() {
+        super.onCreate();
+        active = this;
+        IntentFilter filter = new IntentFilter(GeneratorStateStore.ACTION_STATE_CHANGED);
+        filter.addAction(AssetStore.ACTION_ASSETS_CHANGED);
+        filter.addAction(InputMethodSupport.ACTION_MODE_CHANGED);
+        filter.addAction(QqSendAccessibilityService.ACTION_RESULT);
+        ContextCompat.registerReceiver(this, changes, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
+        getContentResolver().registerContentObserver(Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES), false, accessibilitySetting);
+        androidx.core.app.NotificationManagerCompat.from(this).cancel(6001);
+    }
+
+    @Override @SuppressLint("SetJavaScriptEnabled") public View onCreateInputView() {
+        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); }
+        FrameLayout root = new FrameLayout(this);
+        int height = Math.min(dp(410), Math.round(getResources().getDisplayMetrics().heightPixels * .50f));
+        root.setLayoutParams(new FrameLayout.LayoutParams(-1, height));
+        root.setMinimumHeight(height);
+        int background = ThemeChrome.resolve(ThemeChrome.loadThemeKey(getSharedPreferences("mahou_popup_prefs", MODE_PRIVATE))).webBg;
+        root.setBackgroundColor(background);
+        webView = new WebView(this);
+        webView.setBackgroundColor(background);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setBlockNetworkLoads(true);
+        settings.setDisplayZoomControls(false);
+        settings.setUseWideViewPort(false);
+        settings.setLoadWithOverviewMode(false);
+        webView.setInitialScale(0);
+        webView.setHorizontalScrollBarEnabled(false);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> applyImeViewport());
+        webView.addJavascriptInterface(new ImeBridge(), "AndroidBridge");
+        webView.setWebViewClient(LocalWebContent.createClient(this, () -> {
+            appliedViewport = 0;
+            applyImeViewport();
+            deliverState();
+            deliverTarget();
+        }));
+        root.addView(webView, new FrameLayout.LayoutParams(-1, height));
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            view.setPadding(bars.left, 0, bars.right, bars.bottom);
+            if (webView != null) webView.setLayoutParams(new FrameLayout.LayoutParams(-1, Math.max(dp(240), height - bars.bottom)));
+            return WindowInsetsCompat.CONSUMED;
+        });
+        webView.loadUrl(LocalWebContent.ORIGIN + "/assets/ime.html?ime=1");
+        return root;
+    }
+
+    @Override public boolean onEvaluateFullscreenMode() { return false; }
+
+    @Override public void onWindowShown() {
+        super.onWindowShown();
+        if (webView != null) webView.requestFocus();
+    }
+
+    private int appliedViewport;
+
+    private void applyImeViewport() {
+        if (webView == null) return;
+        int pixels = webView.getWidth();
+        if (pixels <= 0 || pixels == appliedViewport) return;
+        appliedViewport = pixels;
+        int css = Math.max(1, Math.round(pixels / getResources().getDisplayMetrics().density));
+        // #region agent log
+        Log.i("MahouDebug", "viewport px=" + pixels + " css=" + css + " density=" + getResources().getDisplayMetrics().density);
+        // #endregion
+        webView.evaluateJavascript("(function(){var w=" + css
+                + ";var m=document.querySelector('meta[name=viewport]');if(m)m.setAttribute('content','width='+w+',initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover');"
+                + "document.documentElement.style.width=w+'px';document.documentElement.style.maxWidth=w+'px';"
+                + "document.body.style.width=w+'px';document.body.style.maxWidth=w+'px';})()", null);
+    }
+
+    @Override public void onStartInput(EditorInfo info, boolean restarting) {
+        super.onStartInput(info, restarting);
+        ++inputSession;
+        inputActive = true;
+        trackField(info);
+        deliverTarget();
+    }
+
+    @Override public void onStartInputView(EditorInfo info, boolean restarting) {
+        super.onStartInputView(info, restarting);
+        inputActive = true;
+        ImeReturnChip.hide(this);
+        ImeReturnNotifier.hide(this);
+        deliverState();
+        deliverTarget();
+    }
+
+    // InputMethodService owns Back, including predictive Back. Hidden keyboards must not consume it.
+    @Override public void onWindowHidden() {
+        evaluate("window.onImeHidden&&window.onImeHidden();");
+        super.onWindowHidden();
+    }
+
+    @Override public void onFinishInput() {
+        inputActive = false;
+        ++inputSession;
+        evaluate("window.onInputEnded&&window.onInputEnded();");
+        super.onFinishInput();
+    }
+
+    @Override public void onDestroy() {
+        destroyed = true;
+        ++inputSession;
+        main.removeCallbacks(dropOfferedImage);
+        main.removeCallbacks(continueCaptionSend);
+        Uri current = offeredImage;
+        offeredImage = null;
+        if (current != null) removeOfferedImage(current);
+        sweepOfferedImages(null);
+        worker.shutdownNow();
+        try { unregisterReceiver(changes); } catch (IllegalArgumentException ignored) {}
+        getContentResolver().unregisterContentObserver(accessibilitySetting);
+        ImeReturnChip.hide(this);
+        ImeReturnNotifier.hide(this);
+        if (active == this) active = null;
+        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); webView = null; }
+        super.onDestroy();
+    }
+
+    private boolean sensitive(EditorInfo info) {
+        if (info == null) return true;
+        int variation = info.inputType & InputType.TYPE_MASK_VARIATION;
+        int type = info.inputType & InputType.TYPE_MASK_CLASS;
+        return type == InputType.TYPE_CLASS_TEXT && (variation == InputType.TYPE_TEXT_VARIATION_PASSWORD
+                || variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD || variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                || type == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD;
+    }
+
+    private void deliverTarget() {
+        try {
+            EditorInfo info = getCurrentInputEditorInfo();
+            String target = info == null ? "" : info.packageName;
+            boolean own = getPackageName().equals(target);
+            int inputClass = info == null ? 0 : info.inputType & InputType.TYPE_MASK_CLASS;
+            JSONObject result = new JSONObject().put("active", inputActive).put("sensitive", sensitive(info))
+                    .put("targetPackage", target).put("session", inputSession)
+                    .put("textOnly", own || sensitive(info) || !InputMethodSupport.isImageMode(this))
+                    .put("numeric", inputClass == InputType.TYPE_CLASS_NUMBER || inputClass == InputType.TYPE_CLASS_PHONE)
+                    .put("directSendEnabled", QqSendAccessibilityService.isEnabled(this))
+                    .put("canSend", inputActive && !sensitive(info) && QqSendAccessibilityService.isTarget(target));
+            evaluate("window.receiveInputTarget&&window.receiveInputTarget(" + JSONObject.quote(result.toString()) + ");");
+        } catch (Exception ignored) {}
+    }
+
+    private void deliverState() {
+        evaluate("window.receiveGeneratorState&&window.receiveGeneratorState(" + JSONObject.quote(GeneratorStateStore.read(this)) + ");");
+    }
+
+    private void evaluate(String script) {
+        if (!destroyed && webView != null) webView.evaluateJavascript(script, null);
+    }
+
+    private void notice(String text) { notice(text, 1800); }
+
+    private void notice(String text, int durationMs) {
+        if (destroyed) return;
+        if (isInputViewShown()) evaluate("typeof showAppNotice==='function'&&showAppNotice(" + JSONObject.quote(text) + "," + durationMs + ");");
+        else Toast.makeText(this, text, durationMs >= 3000 ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateImeSendState(String state, String message) {
+        evaluate("window.setImeSendState&&window.setImeSendState(" + JSONObject.quote(state) + "," + JSONObject.quote(message) + ");");
+    }
+
+    private InputConnection connection(long session) {
+        return !destroyed && inputActive && session == inputSession ? getCurrentInputConnection() : null;
+    }
+
+    private void edit(String action, long session) {
+        InputConnection connection = connection(session);
+        if (connection == null) return;
+        if ("delete".equals(action)) {
+            noteDelete();
+            CharSequence selected = connection.getSelectedText(0);
+            if (selected != null && selected.length() > 0) connection.commitText("", 1);
+            else if (Build.VERSION.SDK_INT >= 24) connection.deleteSurroundingTextInCodePoints(1, 0);
+            else {
+                CharSequence before = connection.getTextBeforeCursor(2, 0);
+                int count = before != null && before.length() == 2 && Character.isSurrogatePair(before.charAt(0), before.charAt(1)) ? 2 : 1;
+                connection.deleteSurroundingText(count, 0);
+            }
+        } else if ("all".equals(action)) connection.performContextMenuAction(android.R.id.selectAll);
+        else if ("left".equals(action) || "right".equals(action)) {
+            int code = "left".equals(action) ? KeyEvent.KEYCODE_DPAD_LEFT : KeyEvent.KEYCODE_DPAD_RIGHT;
+            connection.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, code));
+            connection.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, code));
+        } else if ("enter".equals(action)) {
+            EditorInfo info = getCurrentInputEditorInfo();
+            int option = info == null ? EditorInfo.IME_ACTION_NONE : info.imeOptions & EditorInfo.IME_MASK_ACTION;
+            if (option == EditorInfo.IME_ACTION_SEND || option == EditorInfo.IME_ACTION_SEARCH
+                    || option == EditorInfo.IME_ACTION_GO || option == EditorInfo.IME_ACTION_DONE || option == EditorInfo.IME_ACTION_NEXT)
+                connection.performEditorAction(option);
+            else connection.commitText("\n", 1);
+        }
+    }
+
+    private void trackField(EditorInfo info) {
+        String key = (info == null ? "" : info.packageName) + ":" + (info == null ? 0 : info.fieldId);
+        if (!key.equals(fieldKey)) { fieldKey = key; typedMirror = ""; }
+    }
+
+    private void noteCommit(String text) {
+        if (text == null || text.isEmpty()) return;
+        typedMirror = typedMirror + text;
+        if (typedMirror.length() > 180) typedMirror = typedMirror.substring(typedMirror.length() - 180);
+    }
+
+    private void noteDelete() {
+        if (!typedMirror.isEmpty()) {
+            int end = typedMirror.offsetByCodePoints(typedMirror.length(), -1);
+            typedMirror = typedMirror.substring(0, end);
+        }
+    }
+
+    private void readDraft() {
+        if (!inputActive || sensitive(getCurrentInputEditorInfo())) { notice("安全输入框不读取草稿"); return; }
+        InputConnection connection = getCurrentInputConnection();
+        if (connection == null) { notice("请先点一下聊天输入框"); return; }
+        try {
+            String text = "";
+            ExtractedTextRequest request = new ExtractedTextRequest();
+            request.hintMaxChars = 181;
+            ExtractedText extracted = connection.getExtractedText(request, 0);
+            if (extracted != null && extracted.text != null) text = extracted.text.toString();
+            if (text.trim().isEmpty()) {
+                CharSequence before = connection.getTextBeforeCursor(181, 0);
+                CharSequence after = connection.getTextAfterCursor(181, 0);
+                text = (before == null ? "" : before.toString()) + (after == null ? "" : after.toString());
+            }
+            if (text.trim().isEmpty()) text = typedMirror;
+            if (text.trim().isEmpty()) { notice("当前输入框是空的"); return; }
+            if (text.length() > 180) { notice("草稿超过 180 字，请缩短后再读取"); return; }
+            GeneratorStateStore.update(this, new JSONObject().put("text", text).toString());
+            deliverState();
+            notice("已读取到图片台词，聊天草稿保留");
+        } catch (Exception error) { notice("当前输入框无法读取草稿"); }
+    }
+
+    private void send(String dataUrl) {
+        EditorInfo info = getCurrentInputEditorInfo();
+        String target = info == null || info.packageName == null ? "" : info.packageName;
+        if (!inputActive || sensitive(info) || !QqSendAccessibilityService.isTarget(target)) {
+            updateImeSendState("error", "请先打开要发送图片的 QQ 或 TIM 聊天");
+            notice("请先打开要发送图片的 QQ 或 TIM 聊天");
+            return;
+        }
+        if (destroyed) return;
+        if (exportBusy) {
+            updateImeSendState("error", "上一张还在处理，请稍候");
+            notice("上一张还在处理");
+            return;
+        }
+        exportBusy = true;
+        updateImeSendState("busy", "正在准备图片…");
+        pendingSendUrl = dataUrl;
+        worker.execute(() -> {
+            File temporary = null;
+            try {
+                temporary = PopupShareImage.prepare(getApplicationContext(), dataUrl);
+                File directory = new File(getCacheDir(), "ime-share");
+                if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException();
+                File image = new File(directory, UUID.randomUUID() + ".png");
+                if (!temporary.renameTo(image)) throw new IOException();
+                Uri uri = Uri.parse("content://com.mahou.textbox.share/ime/" + image.getName());
+                main.post(() -> placeImage(uri, target));
+            } catch (Exception | OutOfMemoryError error) {
+                PopupShareImage.discard(temporary);
+                main.post(() -> {
+                    exportBusy = false;
+                    updateImeSendState("error", "图片没有放进输入框，请重试");
+                    notice("图片没有放进输入框，请重试");
+                });
+            }
+        });
+    }
+
+    private void placeImage(Uri uri, String target) {
+        exportBusy = false;
+        if (destroyed) return;
+        EditorInfo info = getCurrentInputEditorInfo();
+        InputConnection connection = getCurrentInputConnection();
+        String mimes = "";
+        if (Build.VERSION.SDK_INT >= 25 && info != null && info.contentMimeTypes != null) {
+            StringBuilder joined = new StringBuilder();
+            for (String mime : info.contentMimeTypes) {
+                if (joined.length() > 0) joined.append(',');
+                joined.append(mime);
+            }
+            mimes = joined.toString();
+        }
+        boolean inserted = false;
+        if (Build.VERSION.SDK_INT >= 25 && connection != null && info != null && target.equals(info.packageName)) {
+            try {
+                grantUriPermission(target, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                InputContentInfo content = new InputContentInfo(uri, new ClipDescription("魔裁图片", new String[]{"image/png"}));
+                inserted = connection.commitContent(content, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null);
+            } catch (RuntimeException ignored) {}
+        }
+        // #region agent log
+        Log.i("MahouDebug", "send inserted=" + inserted + " mimes=" + mimes + " target=" + target);
+        // #endregion
+        if (inserted) {
+            String message = "图片已放入，请点击 QQ 输入框右侧的“+”发送图片。";
+            updateImeSendState("inserted", message);
+            notice(message, 3600);
+            return;
+        }
+        String name = uri.getLastPathSegment();
+        File image = new File(new File(getCacheDir(), "ime-share"), name == null ? "" : name);
+        worker.execute(() -> offerAlbumImage(image));
+    }
+
+    private void offerAlbumImage(File image) {
+        Uri media = null;
+        String error = "";
+        try {
+            if (!image.isFile()) throw new IOException("missing");
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + System.currentTimeMillis() + ".png");
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            if (Build.VERSION.SDK_INT >= 29) {
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Mahou");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+            }
+            media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (media == null) throw new IOException("insert");
+            try (InputStream input = new FileInputStream(image); OutputStream output = getContentResolver().openOutputStream(media)) {
+                if (output == null) throw new IOException("open");
+                byte[] buffer = new byte[16384];
+                for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
+            }
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues ready = new ContentValues();
+                ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(media, ready, null, null);
+            }
+            int removed = sweepOfferedImages(media);
+            offeredImage = media;
+            offerGeneration++;
+            Uri published = media;
+            media = null;
+            // #region agent log
+            Log.i("MahouDebug", "album image=" + published + " removed=" + removed);
+            // #endregion
+            main.post(() -> {
+                main.removeCallbacks(dropOfferedImage);
+                main.postDelayed(dropOfferedImage, OFFER_KEEP_MS);
+                String message = "图片已保存到相册。点 QQ 输入框右侧“+”→“相册”，选择最新的魔裁图片发送。";
+                updateImeSendState("ready", message);
+                notice(message, 5200);
+            });
+            return;
+        } catch (Exception | OutOfMemoryError failure) {
+            error = failure.getClass().getSimpleName();
+            if (media != null) removeOfferedImage(media);
+        }
+        // #region agent log
+        Log.i("MahouDebug", "album image error=" + error);
+        // #endregion
+        main.post(() -> {
+            updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
+            notice("图片没能交给 QQ 识别，请重试");
+        });
+    }
+
+    private void dropOfferedImageNow() {
+        int generation = offerGeneration;
+        Uri current = offeredImage;
+        if (current == null) return;
+        worker.execute(() -> {
+            if (generation != offerGeneration) return;
+            offeredImage = null;
+            int removed = removeOfferedImage(current) + sweepOfferedImages(null);
+            // #region agent log
+            Log.i("MahouDebug", "album image dropped=" + current + " removed=" + removed);
+            // #endregion
+        });
+    }
+
+    private int removeOfferedImage(Uri uri) {
+        try { return getContentResolver().delete(uri, null, null); }
+        catch (RuntimeException ignored) { return 0; }
+    }
+
+    private int sweepOfferedImages(Uri keep) {
+        if (Build.VERSION.SDK_INT < 29) return 0;
+        int removed = 0;
+        String[] projection = { MediaStore.Images.Media._ID };
+        String selection = MediaStore.Images.Media.DISPLAY_NAME + " LIKE ? AND " + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?";
+        String[] args = { "mahou-%", Environment.DIRECTORY_PICTURES + "/Mahou%" };
+        try (android.database.Cursor cursor = getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, args, null)) {
+            if (cursor == null) return 0;
+            int id = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+            while (cursor.moveToNext()) {
+                Uri item = android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(id));
+                if (keep != null && keep.equals(item)) continue;
+                removed += removeOfferedImage(item);
+            }
+        } catch (RuntimeException ignored) {}
+        return removed;
+    }
+
+    private void copy(String dataUrl) {
+        if (destroyed) return;
+        if (exportBusy) { notice("上一张还在处理"); return; }
+        exportBusy = true;
+        worker.execute(() -> {
+            File temporary = null;
+            try {
+                temporary = PopupShareImage.prepare(getApplicationContext(), dataUrl);
+                File directory = new File(getCacheDir(), "ime-share");
+                if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException();
+                File[] old = directory.listFiles();
+                long total = 0;
+                if (old != null) for (File file : old) {
+                    if (file.lastModified() < System.currentTimeMillis() - 86400000L) file.delete();
+                    else total += file.length();
+                }
+                if (total > 64L * 1024 * 1024) throw new IOException();
+                File image = new File(directory, UUID.randomUUID() + ".png");
+                if (!temporary.renameTo(image)) throw new IOException();
+                Uri uri = Uri.parse("content://com.mahou.textbox.share/ime/" + image.getName());
+                main.post(() -> {
+                    exportBusy = false;
+                    if (destroyed) return;
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(ClipData.newUri(getContentResolver(), "魔裁文本框图片", uri));
+                        notice("图片已复制");
+                    }
+                });
+            } catch (Exception | OutOfMemoryError error) {
+                PopupShareImage.discard(temporary);
+                main.post(() -> { exportBusy = false; notice("图片复制失败，请重试"); });
+            }
+        });
+    }
+
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private void openCaptionEditor() {
+        if (destroyed) return;
+        EditorInfo info = getCurrentInputEditorInfo();
+        captionEditorTarget = info == null || info.packageName == null ? "" : info.packageName;
+        pendingCaptionSend = false;
+        captionSendWaits = 0;
+        boolean builtInKeyboard = InputMethodSupport.useBuiltInTextKeyboard(this);
+        startActivity(ImeEditorActivity.intent(this).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION));
+        if (builtInKeyboard) {
+            requestHideSelf(0);
+            Log.i("MahouDebug", "caption-editor sheet built-in-keyboard");
+        } else {
+            // Keep the existing phone-keyboard flow as the default.
+            handOffToTextKeyboard(false);
+            Log.i("MahouDebug", "caption-editor sheet original-keyboard");
+        }
+    }
+
+    private void previousKeyboard() { previousKeyboard(false); }
+
+    private void previousKeyboard(boolean force) {
+        if (switchingKeyboard || destroyed) return;
+        boolean chip = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
+        boolean notes = NotificationManagerCompat.from(this).areNotificationsEnabled();
+        if (!force && !chip && !notes) {
+            startActivity(ImeReturnActivity.prepareIntent(this));
+            return;
+        }
+        if (chip) ImeReturnChip.show(this);
+        if (notes) ImeReturnNotifier.show(this);
+        handOffToTextKeyboard(true);
+        Toast.makeText(this, chip
+                ? "已切到原键盘。点右上角「回魔裁」，再选魔裁图片输入法。"
+                : (notes
+                    ? "已切到原键盘。点通知「回到魔裁」，再选魔裁图片输入法。"
+                    : "已切到原键盘。点屏幕下方键盘图标，选回魔裁图片输入法。"),
+                Toast.LENGTH_LONG).show();
+    }
+
+    private void handOffToTextKeyboard(boolean allowDirectSwitch) {
+        if (switchingKeyboard || destroyed) return;
+        switchingKeyboard = true;
+        String keyboard = InputMethodSupport.textKeyboard(this);
+        try {
+            if (Build.VERSION.SDK_INT >= 28) switchToPreviousInputMethod();
+            else {
+                InputMethodManager manager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (manager != null) manager.switchToLastInputMethod(getWindow().getWindow().getAttributes().token);
+            }
+        } catch (RuntimeException ignored) {}
+        main.postDelayed(() -> {
+            switchingKeyboard = false;
+            if (destroyed) return;
+            String current = Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
+            // #region agent log
+            Log.i("MahouDebug", "handoff current=" + current + " fallback=" + keyboard);
+            // #endregion
+            if (current != null && !current.startsWith(getPackageName() + "/")) InputMethodSupport.rememberTextKeyboard(this, current);
+            else if (allowDirectSwitch && keyboard != null) {
+                try { switchInputMethod(keyboard); } catch (RuntimeException ignored) {}
+            }
+        }, 300);
+    }
+
+    public final class ImeBridge {
+        @JavascriptInterface public String getGeneratorState() { return GeneratorStateStore.read(MahouInputMethodService.this); }
+        @JavascriptInterface public String updateGeneratorState(String patch) {
+            try { return GeneratorStateStore.update(MahouInputMethodService.this, patch); }
+            catch (Exception error) { return "{\"error\":\"无法保存台词\"}"; }
+        }
+        @JavascriptInterface public String listAssets() {
+            try { return AssetStore.listAssets(MahouInputMethodService.this); }
+            catch (Exception error) { return "{\"backgrounds\":[],\"characters\":[],\"emotions\":[]}"; }
+        }
+        @JavascriptInterface public String getAppInfo() {
+            try { return AssetStore.getAppInfo(MahouInputMethodService.this); }
+            catch (Exception error) { return "{}"; }
+        }
+        @JavascriptInterface public void commitText(String text, long session) {
+            if (text == null || text.length() > 4096) return;
+            main.post(() -> {
+                InputConnection connection = connection(session);
+                if (connection == null) return;
+                connection.commitText(text, 1);
+                noteCommit(text);
+            });
+        }
+        @JavascriptInterface public void editKey(String action, long session) { main.post(() -> edit(action, session)); }
+        @JavascriptInterface public void importCurrentDraft() { main.post(MahouInputMethodService.this::readDraft); }
+        @JavascriptInterface public void requestInputTarget() { main.post(MahouInputMethodService.this::deliverTarget); }
+        @JavascriptInterface public void shareToQQ(String dataUrl) { main.post(() -> send(dataUrl)); }
+        @JavascriptInterface public void shareImage(String dataUrl) { main.post(() -> copy(dataUrl)); }
+        @JavascriptInterface public void hidePanel() { main.post(() -> { if (!destroyed) requestHideSelf(0); }); }
+        @JavascriptInterface public void previousKeyboard() { main.post(MahouInputMethodService.this::previousKeyboard); }
+        @JavascriptInterface public void openCaptionEditor() { main.post(MahouInputMethodService.this::openCaptionEditor); }
+        @JavascriptInterface public void debugMark(String message) {
+            // #region agent log
+            Log.i("MahouDebug", message == null ? "" : message);
+            // #endregion
+        }
+        @JavascriptInterface public void showToast(String text) { main.post(() -> notice(text)); }
+        @JavascriptInterface public String getDirectSendStatus() { return QqSendAccessibilityService.status(MahouInputMethodService.this); }
+        @JavascriptInterface public void openDirectSendSettings() { main.post(() -> notice("辅助发送已停用")); }
+        @JavascriptInterface public void cancelDirectSend() { main.post(QqSendAccessibilityService::cancel); }
+        @JavascriptInterface public void openMainEditor() {
+            main.post(() -> {
+                startActivity(new Intent(MahouInputMethodService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                requestHideSelf(0);
+            });
+        }
+        @JavascriptInterface public String getPopupPreference(String key) {
+            if (!"uiTheme".equals(key) && !"qqExportSize".equals(key) && !"textKeyboard".equals(key)) return "";
+            return getSharedPreferences("mahou_popup_prefs", MODE_PRIVATE).getString(key, "");
+        }
+        @JavascriptInterface public void setPopupPreference(String key, String value) {
+            if ((!"uiTheme".equals(key) && !"qqExportSize".equals(key) && !"textKeyboard".equals(key)) || value == null || value.length() > 64) return;
+            getSharedPreferences("mahou_popup_prefs", MODE_PRIVATE).edit().putString(key, value).apply();
+        }
+    }
+}

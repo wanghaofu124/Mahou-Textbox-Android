@@ -1,0 +1,23 @@
+.dock-mode { --bottom-safe: 8px; }
+.dock-mode .workspace { grid-template-rows: minmax(0, 1fr) auto; padding: 6px 8px 0; gap: 6px; }
+.dock-mode .workspace-content { gap: 8px; }
+.dock-mode .composer-tools { min-height: 40px; }
+.dock-mode .composer-tools button { min-height: 40px; }
+.dock-mode .composer-tools .icon-button { height: 40px; width: 40px; flex-basis: 40px; }
+.dock-mode .selection-row { gap: 4px; }
+.dock-mode .selector { grid-template-columns: 36px minmax(0,1fr) 36px; gap: 4px; }
+.dock-mode .step-button { width: 36px; height: 36px; min-height: 36px; font-size: 18px; }
+.dock-mode .selection-button { padding: 6px; grid-template-columns: 30px minmax(0, 1fr); min-height: 56px; }
+.dock-mode .selection-button img { width: 30px; height: 36px; }
+.dock-mode .selection-button > svg { display: none; }
+.dock-mode .selection-button output { font-size: 12px; }
+.dock-mode .sendbar { padding: 6px 0 8px; }
+.dock-mode.is-editing .selection-row,
+.dock-mode.ime-visible .selection-row { display: none; }
+@media (max-height: 320px) {
+  .dock-mode .workspace-content { gap: 4px; }
+  .dock-mode .sendbar > button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-mode * { transition: none !important; }
+}

@@ -8,8 +8,6 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -21,6 +19,8 @@ import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -31,6 +31,8 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.json.JSONObject;
 
@@ -42,6 +44,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 public class MainActivity extends ComponentActivity {
     public static final String EXTRA_TEST_ACTION = "mahou_test_action";
@@ -54,10 +57,18 @@ public class MainActivity extends ComponentActivity {
     private static final String SHARE_FILE_NAME = "mahou_textbox.png";
     private static final String SHARE_MIME = "image/png";
     private static final String PREFS_NAME = "mahou_popup_prefs";
+    private static final String ACTION_ASSETS_CHANGED = "com.mahou.textbox.ASSETS_CHANGED";
 
     private WebView webView;
     private AccessibleActionLayer accessibleActionLayer;
     private boolean startPopupAfterNotificationRequest;
+    private boolean editing;
+    private boolean imeVisible;
+    private boolean activityResumed;
+    private long deliveredStateRevision = -1L;
+    private final ExecutorService exportWorker = Executors.newSingleThreadExecutor();
+    private boolean exportBusy;
+    private volatile boolean destroyed;
 
     private final ActivityResultLauncher<String> notificationPermission = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(),
@@ -85,15 +96,27 @@ public class MainActivity extends ComponentActivity {
             if (target != null && !"main".equals(target)) {
                 return;
             }
+            if (intent.getBooleanExtra(ImagePickerActivity.EXTRA_CANCELLED, false)) return;
             String error = intent.getStringExtra(ImagePickerActivity.EXTRA_ERROR);
             if (error != null) {
                 Toast.makeText(MainActivity.this, "导入失败：" + error, Toast.LENGTH_LONG).show();
                 return;
             }
-            String dataUrl = intent.getStringExtra(ImagePickerActivity.EXTRA_DATA_URL);
+            String imageUrl = intent.getStringExtra(ImagePickerActivity.EXTRA_IMAGE_URL);
             String kind = intent.getStringExtra(ImagePickerActivity.EXTRA_KIND);
             String ownerId = intent.getStringExtra(ImagePickerActivity.EXTRA_OWNER_ID);
-            deliverPickedAsset(kind == null ? "background" : kind, ownerId, dataUrl);
+            deliverPickedAsset(kind == null ? "background" : kind, ownerId, imageUrl);
+        }
+    };
+
+    private final BroadcastReceiver generatorStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (GeneratorStateStore.ACTION_STATE_CHANGED.equals(intent.getAction())) {
+                if (activityResumed) deliverGeneratorState(intent.getStringExtra(GeneratorStateStore.EXTRA_STATE_JSON));
+            } else if (ACTION_ASSETS_CHANGED.equals(intent.getAction()) && webView != null) {
+                webView.evaluateJavascript("window.receiveAssetsChanged&&window.receiveAssetsChanged();", null);
+            }
         }
     };
 
@@ -115,6 +138,7 @@ public class MainActivity extends ComponentActivity {
     @SuppressLint("SetJavaScriptEnabled")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         FrameLayout root = new FrameLayout(this);
         webView = new WebView(this);
         root.addView(webView, new FrameLayout.LayoutParams(
@@ -127,16 +151,21 @@ public class MainActivity extends ComponentActivity {
                 triggerWebAction(action);
             }
         });
+        accessibleActionLayer.setVisibility(View.GONE);
+        accessibleActionLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         root.addView(accessibleActionLayer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
         ));
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
-            Insets systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-            view.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return windowInsets;
+            Insets insets = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime());
+            imeVisible = windowInsets.isVisible(WindowInsetsCompat.Type.ime());
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom);
+            return WindowInsetsCompat.CONSUMED;
         });
         setContentView(root);
+        ViewCompat.requestApplyInsets(root);
 
         applyWindowChromeTheme(ThemeChrome.loadThemeKey(
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -154,15 +183,24 @@ public class MainActivity extends ComponentActivity {
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setBlockNetworkLoads(true);
 
         if (BuildConfig.DEBUG) {
             webView.setWebChromeClient(new WebChromeClient());
         }
-        webView.setWebViewClient(LocalWebContent.createClient(this, this::scheduleTestIntentIfNeeded));
+        webView.setWebViewClient(LocalWebContent.createClient(this, () -> {
+            deliveredStateRevision = -1L;
+            if (activityResumed) deliverGeneratorState(GeneratorStateStore.read(this));
+            scheduleTestIntentIfNeeded();
+        }));
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
-        webView.loadUrl(LocalWebContent.START_URL);
         registerImageReceiver();
         registerAssetTransferReceiver();
+        IntentFilter dataChanges = new IntentFilter(GeneratorStateStore.ACTION_STATE_CHANGED);
+        dataChanges.addAction(ACTION_ASSETS_CHANGED);
+        ContextCompat.registerReceiver(this, generatorStateReceiver, dataChanges,
+                ContextCompat.RECEIVER_NOT_EXPORTED);
+        webView.loadUrl(LocalWebContent.START_URL);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -203,6 +241,9 @@ public class MainActivity extends ComponentActivity {
     }
 
     private void runDebugTestAction(String action, int themeSteps, int qqSteps) {
+        if (!BuildConfig.DEBUG || webView == null) {
+            return;
+        }
         if ("qq".equals(action)) {
             triggerWebAction("qq");
             return;
@@ -366,13 +407,35 @@ public class MainActivity extends ComponentActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        activityResumed = true;
+        if (webView != null) {
+            deliverGeneratorState(GeneratorStateStore.read(this));
+            webView.evaluateJavascript("window.refreshInputMethodStatus&&window.refreshInputMethodStatus();", null);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        activityResumed = false;
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
+        destroyed = true;
+        exportWorker.shutdownNow();
         try {
             unregisterReceiver(imageReceiver);
         } catch (Exception ignored) {
         }
         try {
             unregisterReceiver(assetTransferReceiver);
+        } catch (Exception ignored) {
+        }
+        try {
+            unregisterReceiver(generatorStateReceiver);
         } catch (Exception ignored) {
         }
         if (webView != null) {
@@ -399,6 +462,10 @@ public class MainActivity extends ComponentActivity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (editing || imeVisible) {
+                                    dismissKeyboard();
+                                    return;
+                                }
                                 if (webView != null && webView.canGoBack()) {
                                     webView.goBack();
                                 } else {
@@ -423,8 +490,13 @@ public class MainActivity extends ComponentActivity {
     }
 
     private void triggerWebAction(String action) {
+        if (webView == null || action == null) {
+            return;
+        }
         String targetId;
-        if ("popup".equals(action)) {
+        if (action.startsWith("web:")) {
+            targetId = action.substring(4);
+        } else if ("popup".equals(action)) {
             targetId = "popupButton";
         } else if ("random".equals(action)) {
             targetId = "randomButton";
@@ -446,7 +518,76 @@ public class MainActivity extends ComponentActivity {
                 + "); if(el){ el.click(); }})()", null);
     }
 
+    private void dismissKeyboard() {
+        editing = false;
+        if (webView == null) {
+            return;
+        }
+        webView.evaluateJavascript(
+                "(function(){var el=document.activeElement;if(el&&el.blur){el.blur();}})();", null);
+        WindowInsetsControllerCompat controller = ViewCompat.getWindowInsetsController(webView);
+        if (controller != null) {
+            controller.hide(WindowInsetsCompat.Type.ime());
+        }
+        InputMethodManager input = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (input != null) {
+            input.hideSoftInputFromWindow(webView.getWindowToken(), 0);
+        }
+    }
+
+    private void deliverGeneratorState(String json) {
+        if (webView == null || json == null) {
+            return;
+        }
+        try {
+            long revision = new JSONObject(json).getLong("revision");
+            if (revision <= deliveredStateRevision) {
+                return;
+            }
+            deliveredStateRevision = revision;
+            webView.evaluateJavascript("window.receiveGeneratorState&&window.receiveGeneratorState("
+                    + JSONObject.quote(json) + ");", null);
+        } catch (org.json.JSONException ignored) {
+        }
+    }
+
     public class AndroidBridge {
+        @JavascriptInterface public String getInputMethodStatus() { return InputMethodSupport.status(MainActivity.this); }
+        @JavascriptInterface public String getDirectSendStatus() { return QqSendAccessibilityService.status(MainActivity.this); }
+        @JavascriptInterface public void openDirectSendSettings() { runOnUiThread(() -> Toast.makeText(MainActivity.this, "辅助发送已停用", Toast.LENGTH_SHORT).show()); }
+        @JavascriptInterface public void openInputMethodSettings() { runOnUiThread(() -> prepareKeyboardAction("settings")); }
+        @JavascriptInterface public void showInputMethodPicker() { runOnUiThread(() -> prepareKeyboardAction("picker")); }
+        @JavascriptInterface public void useImageMode() {
+            runOnUiThread(() -> {
+                InputMethodSupport.activateImageMode(MainActivity.this);
+                if (!InputMethodSupport.isSelected(MainActivity.this)) prepareKeyboardAction("picker");
+                else if (webView != null) webView.evaluateJavascript("window.refreshInputMethodStatus&&window.refreshInputMethodStatus();", null);
+            });
+        }
+        @JavascriptInterface
+        public String getGeneratorState() {
+            return GeneratorStateStore.read(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String updateGeneratorState(String patchJson) {
+            try {
+                return GeneratorStateStore.update(MainActivity.this, patchJson);
+            } catch (Exception error) {
+                return errorJson(error);
+            }
+        }
+
+        @JavascriptInterface
+        public void dismissKeyboard() {
+            runOnUiThread(MainActivity.this::dismissKeyboard);
+        }
+
+        @JavascriptInterface
+        public void setEditing(boolean value) {
+            runOnUiThread(() -> editing = value);
+        }
+
         @JavascriptInterface
         public void showToast(final String message) {
             runOnUiThread(new Runnable() {
@@ -459,43 +600,12 @@ public class MainActivity extends ComponentActivity {
 
         @JavascriptInterface
         public void shareImage(final String dataUrl) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    if (isDebugBuild()) {
-                        Log.i(TAG_TEST, "bridge_share_image");
-                    }
-                    try {
-                        Uri uri = saveShareImage(dataUrl);
-                        Intent intent = buildShareIntent(uri);
-                        startActivity(buildShareChooser(intent, uri));
-                    } catch (Exception error) {
-                        Log.e(TAG_SHARE, "shareImage failed", error);
-                        Toast.makeText(MainActivity.this, "分享失败：" + error.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                }
-            });
+            runOnUiThread(() -> exportAndShare(dataUrl, false));
         }
 
         @JavascriptInterface
         public void shareToQQ(final String dataUrl) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        Uri uri = saveShareImage(dataUrl);
-                        Intent intent = buildShareIntent(uri);
-                        intent.setPackage("com.tencent.mobileqq");
-                        grantUriPermission("com.tencent.mobileqq", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        startActivity(intent);
-                    } catch (ActivityNotFoundException notFound) {
-                        shareToTimOrChooser(dataUrl);
-                    } catch (Exception error) {
-                        Log.e(TAG_SHARE, "shareToQQ failed", error);
-                        Toast.makeText(MainActivity.this, "发到 QQ 失败：" + error.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                }
-            });
+            runOnUiThread(() -> QqSendAccessibilityService.openChat(MainActivity.this));
         }
 
         @JavascriptInterface
@@ -540,7 +650,7 @@ public class MainActivity extends ComponentActivity {
             try {
                 return AssetStore.listAssets(MainActivity.this);
             } catch (Exception error) {
-                Log.e("MahouAssets", "listAssets failed", error);
+                if (BuildConfig.DEBUG) Log.e("MahouAssets", "listAssets failed", error);
                 return "{\"backgrounds\":[],\"characters\":[],\"emotions\":[]}";
             }
         }
@@ -550,7 +660,7 @@ public class MainActivity extends ComponentActivity {
             try {
                 return AssetStore.saveAsset(MainActivity.this, kind, metadataJson, imageDataUrl);
             } catch (Exception error) {
-                Log.e("MahouAssets", "saveAsset failed", error);
+                if (BuildConfig.DEBUG) Log.e("MahouAssets", "saveAsset failed", error);
                 return errorJson(error);
             }
         }
@@ -565,7 +675,7 @@ public class MainActivity extends ComponentActivity {
                         imageDataUrl
                 );
             } catch (Exception error) {
-                Log.e("MahouAssets", "saveCharacterBundle failed", error);
+                if (BuildConfig.DEBUG) Log.e("MahouAssets", "saveCharacterBundle failed", error);
                 return errorJson(error);
             }
         }
@@ -575,7 +685,7 @@ public class MainActivity extends ComponentActivity {
             try {
                 return AssetStore.updateAsset(MainActivity.this, id, metadataJson);
             } catch (Exception error) {
-                Log.e("MahouAssets", "updateAsset failed", error);
+                if (BuildConfig.DEBUG) Log.e("MahouAssets", "updateAsset failed", error);
                 return errorJson(error);
             }
         }
@@ -585,7 +695,7 @@ public class MainActivity extends ComponentActivity {
             try {
                 return AssetStore.deleteAsset(MainActivity.this, kind, id);
             } catch (Exception error) {
-                Log.e("MahouAssets", "deleteAsset failed", error);
+                if (BuildConfig.DEBUG) Log.e("MahouAssets", "deleteAsset failed", error);
                 return false;
             }
         }
@@ -616,7 +726,15 @@ public class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public void reportAccessibleActions(final String layoutJson) {
             runOnUiThread(() -> {
-                if (accessibleActionLayer != null) {
+                if (accessibleActionLayer != null && webView != null) {
+                    boolean nativeTree = webView.getAccessibilityNodeProvider() != null;
+                    accessibleActionLayer.setVisibility(nativeTree ? View.GONE : View.VISIBLE);
+                    accessibleActionLayer.setImportantForAccessibility(nativeTree
+                            ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                            : View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+                    if (nativeTree) {
+                        return;
+                    }
                     accessibleActionLayer.updateActions(layoutJson);
                 }
             });
@@ -624,11 +742,17 @@ public class MainActivity extends ComponentActivity {
 
         @JavascriptInterface
         public void setPopupPreference(String key, String value) {
+            if (!isAllowedPreference(key) || value == null || value.length() > 64) {
+                return;
+            }
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(key, value).apply();
         }
 
         @JavascriptInterface
         public String getPopupPreference(String key) {
+            if (!isAllowedPreference(key)) {
+                return "";
+            }
             return getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(key, "");
         }
 
@@ -641,6 +765,10 @@ public class MainActivity extends ComponentActivity {
                 }
             });
         }
+    }
+
+    private static boolean isAllowedPreference(String key) {
+        return "uiTheme".equals(key) || "qqExportSize".equals(key) || "textKeyboard".equals(key);
     }
 
     private void applyWindowChromeTheme(String themeKey) {
@@ -696,8 +824,8 @@ public class MainActivity extends ComponentActivity {
         ContextCompat.registerReceiver(this, assetTransferReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
-    private void deliverPickedAsset(String kind, String ownerId, String dataUrl) {
-        if (dataUrl == null || webView == null) {
+    private void deliverPickedAsset(String kind, String ownerId, String imageUrl) {
+        if (!ImagePickerActivity.isImportUrl(imageUrl) || webView == null) {
             return;
         }
         String script = "window.receivePickedAsset && window.receivePickedAsset("
@@ -705,7 +833,7 @@ public class MainActivity extends ComponentActivity {
                 + ","
                 + JSONObject.quote(ownerId == null ? "" : ownerId)
                 + ","
-                + JSONObject.quote(dataUrl)
+                + JSONObject.quote(imageUrl)
                 + ");";
         webView.evaluateJavascript(script, null);
     }
@@ -719,6 +847,18 @@ public class MainActivity extends ComponentActivity {
                         + JSONObject.quote(resultJson) + ");",
                 null
         );
+    }
+
+    private void prepareKeyboardAction(String action) {
+        dismissKeyboard();
+        InputMethodSupport.activateImageMode(this);
+        performKeyboardAction(action);
+    }
+
+    private void performKeyboardAction(String action) {
+        if ("settings".equals(action)) InputMethodSupport.openSettings(this);
+        else InputMethodSupport.showPicker(this);
+        if (webView != null) webView.evaluateJavascript("window.refreshInputMethodStatus&&window.refreshInputMethodStatus();", null);
     }
 
     private void openPopupMode() {
@@ -743,82 +883,43 @@ public class MainActivity extends ComponentActivity {
     }
 
     private void startPopupService() {
-        ContextCompat.startForegroundService(this, new Intent(this, PopupService.class));
+        dismissKeyboard();
+        InputMethodSupport.activatePopupMode(this);
+        ContextCompat.startForegroundService(this, new Intent(this, PopupService.class)
+                .setAction(PopupService.ACTION_RESTORE_POPUP));
         Toast.makeText(this, "弹窗已开启，可在 QQ 上方使用。", Toast.LENGTH_SHORT).show();
     }
 
-    private void shareToTimOrChooser(String dataUrl) {
-        try {
-            Uri uri = saveShareImage(dataUrl);
-            Intent intent = buildShareIntent(uri);
-            intent.setPackage("com.tencent.tim");
-            grantUriPermission("com.tencent.tim", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(intent);
-        } catch (ActivityNotFoundException notFound) {
-            shareImageViaChooser(dataUrl);
-        } catch (Exception error) {
-            Log.e(TAG_SHARE, "shareToTim failed", error);
-            Toast.makeText(this, "QQ/TIM share target was not found.", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void shareImageViaChooser(String dataUrl) {
-        try {
-            Uri uri = saveShareImage(dataUrl);
-            Intent intent = buildShareIntent(uri);
-            startActivity(buildShareChooser(intent, uri));
-        } catch (Exception error) {
-            Log.e(TAG_SHARE, "chooser fallback failed", error);
-            Toast.makeText(this, "分享失败：" + error.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private Uri saveShareImage(String dataUrl) throws Exception {
-        int commaIndex = dataUrl.indexOf(',');
-        String base64 = commaIndex >= 0 ? dataUrl.substring(commaIndex + 1) : dataUrl;
-        byte[] image = Base64.decode(base64, Base64.DEFAULT);
-        Bitmap bitmap = BitmapFactory.decodeByteArray(image, 0, image.length);
-        if (bitmap == null) {
-            throw new IllegalArgumentException("Cannot decode generated image.");
-        }
-        if (BuildConfig.DEBUG) {
-            Log.i(TAG_SHARE, "share png size: " + bitmap.getWidth() + "x" + bitmap.getHeight());
-        }
-
-        File dir = new File(getCacheDir(), "share");
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IllegalStateException("Cannot create share cache directory.");
-        }
-
-        File outFile = new File(dir, SHARE_FILE_NAME);
-        FileOutputStream output = new FileOutputStream(outFile);
-        try {
-            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
-                throw new IllegalStateException("Cannot encode PNG share image.");
+    private void exportAndShare(String dataUrl, boolean preferQQ) {
+        if (destroyed || exportBusy) return;
+        exportBusy = true;
+        dismissKeyboard();
+        exportWorker.execute(() -> {
+            File temporary = null;
+            try {
+                temporary = PopupShareImage.prepare(getApplicationContext(), dataUrl);
+                final File prepared = temporary;
+                runOnUiThread(() -> {
+                    exportBusy = false;
+                    if (destroyed) { PopupShareImage.discard(prepared); return; }
+                    try {
+                        PopupShareImage.publish(prepared);
+                        Uri uri = Uri.parse("content://" + SHARE_AUTHORITY + "/shared.png");
+                        startActivity(preferQQ ? ShareProxyActivity.qqIntent(this, uri)
+                                : ShareProxyActivity.chooserIntent(this, uri));
+                    } catch (Exception error) {
+                        PopupShareImage.discard(prepared);
+                        Toast.makeText(this, "分享失败，请重试。", Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (Exception | OutOfMemoryError error) {
+                PopupShareImage.discard(temporary);
+                runOnUiThread(() -> {
+                    exportBusy = false;
+                    if (!destroyed) Toast.makeText(this, "无法生成分享图片，请重试。", Toast.LENGTH_LONG).show();
+                });
             }
-        } finally {
-            output.close();
-            bitmap.recycle();
-        }
-
-        return Uri.parse("content://" + SHARE_AUTHORITY + "/shared.png");
-    }
-
-    private Intent buildShareIntent(Uri uri) {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.setType(SHARE_MIME);
-        intent.putExtra(Intent.EXTRA_STREAM, uri);
-        intent.setClipData(ClipData.newUri(getContentResolver(), SHARE_FILE_NAME, uri));
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        return intent;
-    }
-
-    private Intent buildShareChooser(Intent intent, Uri uri) {
-        Intent chooser = Intent.createChooser(intent, "Share Mahou textbox");
-        chooser.putExtra(Intent.EXTRA_STREAM, uri);
-        chooser.setClipData(ClipData.newUri(getContentResolver(), SHARE_FILE_NAME, uri));
-        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        return chooser;
+        });
     }
 
     private String errorJson(Exception error) {

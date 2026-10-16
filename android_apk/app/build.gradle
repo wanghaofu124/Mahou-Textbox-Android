@@ -20,8 +20,8 @@ android {
         applicationId "com.mahou.textbox"
         minSdk 23
         targetSdk 35
-        versionCode 23
-        versionName "0.4.0"
+        versionCode 53
+        versionName "0.7.22"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -89,8 +89,8 @@ android {
 
 tasks.register("syncMahouAssets", Sync) {
     from(sourceRoot) {
-        include "mobile.html", "mobile.css", "mobile.js", "theme-bootstrap.js", "manifest.webmanifest", "sw.js", "font3.ttf"
-        include "icons/**", "background/**", "alisa/**", "anan/**", "coco/**", "ema/**"
+        include "mobile.html", "mobile.css", "mobile.js", "generator-state.js", "workspace.js", "dock.html", "dock.css", "dock.js", "ime.html", "ime.css", "ime.js", "ime-editor.html", "ime-editor.js", "theme-bootstrap.js", "manifest.webmanifest", "sw.js", "font3.ttf"
+        include "pinyin/**", "touch-keyboard.js", "icons/**", "background/**", "alisa/**", "anan/**", "coco/**", "ema/**"
         include "hanna/**", "hiro/**", "mago/**", "meruru/**", "miria/**", "nanoka/**"
         include "noa/**", "reia/**", "sherri/**", "yuki/**"
     }
@@ -115,6 +115,13 @@ tasks.register("validateReleaseSigning") {
         if (!keyFile.isFile()) {
             throw new GradleException("Missing release keystore: ${keyFile}")
         }
+        def store = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+        keyFile.withInputStream { store.load(it, signingProperties.getProperty("storePassword").toCharArray()) }
+        def certificate = store.getCertificate(signingProperties.getProperty("keyAlias"))
+        if (!certificate) throw new GradleException("Release signing certificate is missing.")
+        def fingerprint = java.security.MessageDigest.getInstance("SHA-256").digest(certificate.encoded).encodeHex().toString()
+        def expected = rootProject.file("release-cert.sha256").text.trim().toLowerCase()
+        if (fingerprint != expected) throw new GradleException("Release signing certificate does not match the pinned fingerprint.")
     }
 }
 

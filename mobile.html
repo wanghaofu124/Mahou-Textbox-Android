@@ -6,90 +6,55 @@
     <meta name="theme-color" content="#17181d" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <script src="theme-bootstrap.js"></script>
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="魔裁文本框" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="application-name" content="魔裁文本框" />
-    <title>魔裁文本框生成器</title>
+    <title>魔裁文本框</title>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="icon" href="icons/icon-192.png" />
     <link rel="stylesheet" href="mobile.css" />
   </head>
-  <body>
-    <main class="app">
-      <section class="preview-wrap" aria-label="图片预览">
-        <canvas id="preview" width="2560" height="834"></canvas>
-      </section>
-
-      <section class="controls" aria-label="生成设置">
-        <label class="field field-text">
-          <span>台词</span>
-          <textarea id="lineText" rows="3" maxlength="180" aria-label="台词输入">我宣布，今天群里的整活浓度已经超标了。</textarea>
-        </label>
-
-        <div class="field-grid">
-          <label class="field">
-            <span>角色</span>
-            <select id="characterSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
-            <div class="stepper">
-              <button id="characterPrev" type="button" aria-label="上一个角色">‹</button>
-              <output id="characterLabel" role="status" aria-live="polite"></output>
-              <button id="characterNext" type="button" aria-label="下一个角色">›</button>
-            </div>
-          </label>
-          <label class="field">
-            <span>表情</span>
-            <select id="emotionSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
-            <div class="stepper">
-              <button id="emotionPrev" type="button" aria-label="上一个表情">‹</button>
-              <output id="emotionLabel" role="status" aria-live="polite"></output>
-              <button id="emotionNext" type="button" aria-label="下一个表情">›</button>
-            </div>
-          </label>
-          <label class="field">
-            <span>背景</span>
-            <select id="backgroundSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
-            <div class="stepper">
-              <button id="backgroundPrev" type="button" aria-label="上一个背景">‹</button>
-              <output id="backgroundLabel" role="status" aria-live="polite"></output>
-              <button id="backgroundNext" type="button" aria-label="下一个背景">›</button>
-            </div>
-          </label>
-        </div>
-
-        <div class="popup-pref-row">
-          <label class="field field-qq-export">
-            <span>QQ发出大小</span>
-            <div class="stepper">
-              <button id="qqExportSizePrev" type="button" aria-label="QQ发出尺寸上一档">‹</button>
-              <output id="qqExportSizeLabel" role="status" aria-live="polite"></output>
-              <button id="qqExportSizeNext" type="button" aria-label="QQ发出尺寸下一档">›</button>
-            </div>
-          </label>
-
-          <label class="field field-theme">
-            <span>界面配色</span>
-            <div class="stepper">
-              <button id="uiThemePrev" type="button" aria-label="界面配色上一套">‹</button>
-              <output id="uiThemeLabel" role="status" aria-live="polite"></output>
-              <button id="uiThemeNext" type="button" aria-label="界面配色下一套">›</button>
-            </div>
-          </label>
-        </div>
-
-        <div class="button-row">
-          <button id="popupButton" type="button" aria-label="打开弹窗模式">弹窗模式</button>
-          <button id="randomButton" type="button" aria-label="随机选择当前角色的表情和背景">随机表情</button>
-          <button id="addBackgroundButton" type="button" aria-label="添加自定义背景">添加背景</button>
-          <button id="assetManagerButton" type="button" aria-label="打开素材管理">素材管理</button>
-          <button id="qqButton" type="button" class="primary" aria-label="发到 QQ">发到 QQ</button>
-          <button id="shareButton" type="button" aria-label="分享或保存图片">分享/保存</button>
-          <button id="aboutButton" type="button" aria-label="打开关于与隐私说明">关于与隐私</button>
-        </div>
-      </section>
+  <body class="main-generator">
+    <main class="workspace" aria-label="魔裁文本框生成器">
+      <header class="app-header">
+        <div class="app-heading"><i data-lucide="message-square"></i><h1>魔裁文本框</h1></div>
+        <nav aria-label="工具">
+          <button id="assetManagerButton" class="icon-button" type="button" title="素材管理" aria-label="素材管理"><i data-lucide="library"></i></button>
+          <button id="dockSettingsButton" class="icon-button" type="button" title="设置" aria-label="设置"><i data-lucide="settings-2"></i></button>
+          <button id="aboutButton" class="icon-button" type="button" title="关于与隐私" aria-label="关于与隐私"><i data-lucide="info"></i></button>
+        </nav>
+      </header>
+      <div class="workspace-content">
+        <section class="preview-wrap composer inline-composer" aria-label="图片与台词编辑">
+          <div class="preview-stage">
+            <canvas id="preview" width="2560" height="834" aria-label="台词图片预览"></canvas>
+            <textarea id="lineText" class="inline-line-text" readonly tabindex="-1" rows="3" maxlength="180" aria-label="图片内台词输入" placeholder="台词…" spellcheck="false">今天的群聊，开始整活。</textarea>
+          </div>
+          <div class="composer-tools">
+            <button id="editTextButton" type="button" class="icon-button" title="编辑台词" aria-label="编辑图片内台词"><i data-lucide="pencil"></i></button>
+            <button id="randomButton" type="button" class="icon-button" title="随机表情与背景" aria-label="随机表情与背景"><i data-lucide="shuffle"></i></button>
+            <button id="clearTextButton" type="button" class="icon-button" title="清空台词" aria-label="清空台词"><i data-lucide="eraser"></i></button>
+            <output id="textCounter" aria-label="已输入字数">0 / 180</output>
+            <button id="keyboardDoneButton" data-keyboard-done type="button" class="icon-button" title="收起键盘" aria-label="收起键盘"><i data-lucide="keyboard"></i></button>
+          </div>
+        </section>
+        <section class="selection-row" aria-label="素材选择">
+          <div class="selector"><button id="characterPrev" type="button" class="step-button" aria-label="上一个角色">‹</button><button id="pickCharacter" class="selection-button" type="button" aria-label="选择角色"><img id="currentCharacterThumb" alt="" /><span><small>角色</small><output id="characterLabel"></output></span><i data-lucide="chevron-down"></i></button><button id="characterNext" type="button" class="step-button" aria-label="下一个角色">›</button></div>
+          <div class="selector"><button id="emotionPrev" type="button" class="step-button" aria-label="上一个表情">‹</button><button id="pickEmotion" class="selection-button" type="button" aria-label="选择表情"><img id="currentEmotionThumb" alt="" /><span><small>表情</small><output id="emotionLabel"></output></span><i data-lucide="chevron-down"></i></button><button id="emotionNext" type="button" class="step-button" aria-label="下一个表情">›</button></div>
+          <div class="selector"><button id="backgroundPrev" type="button" class="step-button" aria-label="上一个背景">‹</button><button id="pickBackground" class="selection-button" type="button" aria-label="选择背景"><img id="currentBackgroundThumb" alt="" /><span><small>背景</small><output id="backgroundLabel"></output></span><i data-lucide="chevron-down"></i></button><button id="backgroundNext" type="button" class="step-button" aria-label="下一个背景">›</button></div>
+        </section>
+        <div class="catalog-bar"><output id="catalogSummary">内置角色与背景</output><button id="openCustomButton" type="button">自定义素材</button></div>
+      </div>
+      <footer class="sendbar">
+        <div class="mode-switch" role="group" aria-label="聊天模式"><button id="modeImeButton" type="button" aria-pressed="false">输入法</button><button id="modePopupButton" type="button" aria-pressed="false">悬浮窗</button></div>
+        <button id="qqButton" type="button" class="primary" aria-label="前往 QQ 当前聊天"><i data-lucide="message-circle"></i><span>去 QQ</span></button>
+        <button id="shareButton" type="button" class="icon-button" title="分享或保存图片" aria-label="分享或保存图片"><i data-lucide="share-2"></i></button>
+      </footer>
+      <div hidden aria-hidden="true">
+        <select id="characterSelect" tabindex="-1"></select><select id="emotionSelect" tabindex="-1"></select><select id="backgroundSelect" tabindex="-1"></select>
+        <button id="addBackgroundButton" type="button"></button>
+      </div>
     </main>
+    <script src="icons/lucide.min.js"></script>
+    <script src="generator-state.js"></script>
     <script src="mobile.js"></script>
+    <script src="workspace.js"></script>
   </body>
 </html>

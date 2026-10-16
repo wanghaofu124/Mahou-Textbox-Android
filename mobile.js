@@ -1,5 +1,6 @@
 const CANVAS_WIDTH = 2560;
 const CANVAS_HEIGHT = 834;
+const PREVIEW_MAX_WIDTH = 1280;
 const SHARE_EXPORT_WIDTH = 1000;
 const QQ_EXPORT_PRESETS = [
   { key: "small", label: "较小", width: 720 },
@@ -73,6 +74,7 @@ const uiThemeNext = $("uiThemeNext");
 const uiThemeLabel = $("uiThemeLabel");
 
 const imageCache = new Map();
+const MAX_CACHED_IMAGES = 16;
 const BUILT_IN_BACKGROUND_COUNT = 16;
 const STORAGE_KEYS = {
   fallbackAssets: "mahou.fallbackAssets",
@@ -82,16 +84,24 @@ const STORAGE_KEYS = {
   background: "mahou.background",
   qqExportSize: "mahou.qqExportSize",
   uiTheme: "mahou.uiTheme",
+  textKeyboard: "mahou.textKeyboard",
 };
 
 let assetState = loadAssets();
 let renderToken = 0;
+let fontReady = null;
 let pendingPick = null;
 let currentAssetTab = "background";
 let pendingAssetScrollId = "";
 let pendingAssetHighlightId = "";
 let suppressNextOverlayPop = false;
-const isPopupMode = new URLSearchParams(location.search).get("popup") === "1";
+let generatorSnapshot = {};
+let pendingRenderFrame = 0;
+let shareBusy = false;
+let previewRenderWidth = PREVIEW_MAX_WIDTH;
+const overlayStack = [];
+const isPopupMode = new URLSearchParams(location.search).get("popup") === "1"
+  || new URLSearchParams(location.search).get("dock") === "1";
 
 if (isPopupMode) {
   document.documentElement.classList.add("popup-mode");
@@ -131,6 +141,18 @@ function loadUiThemeKey() {
 
 function saveUiThemeKey(key) {
   saveSyncedPreference(STORAGE_KEYS.uiTheme, "uiTheme", key, normalizeUiThemeKey);
+}
+
+function normalizeTextKeyboardMode(mode) {
+  return mode === "builtin" ? "builtin" : "system";
+}
+
+function loadTextKeyboardMode() {
+  return loadSyncedPreference(STORAGE_KEYS.textKeyboard, "textKeyboard", normalizeTextKeyboardMode);
+}
+
+function saveTextKeyboardMode(mode) {
+  return saveSyncedPreference(STORAGE_KEYS.textKeyboard, "textKeyboard", mode, normalizeTextKeyboardMode);
 }
 
 function getUiThemePreset(key = loadUiThemeKey()) {
@@ -193,7 +215,6 @@ window.__testGetQqExportKey = function __testGetQqExportKey() {
 };
 
 function notifyAndroid(message, visible = false) {
-  console.log(message);
   if (visible && window.AndroidBridge && typeof window.AndroidBridge.showToast === "function") {
     try {
       window.AndroidBridge.showToast(message);
@@ -203,7 +224,7 @@ function notifyAndroid(message, visible = false) {
   }
 }
 
-function showAppNotice(message) {
+function showAppNotice(message, durationMs = 1800) {
   let notice = document.querySelector(".app-notice");
   if (!notice) {
     notice = document.createElement("div");
@@ -215,7 +236,13 @@ function showAppNotice(message) {
   notice.textContent = message;
   notice.classList.add("open");
   clearTimeout(showAppNotice.timer);
-  showAppNotice.timer = setTimeout(() => notice.classList.remove("open"), 1800);
+  showAppNotice.timer = setTimeout(() => notice.classList.remove("open"), durationMs);
+}
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[character]));
 }
 
 function emptyAssets() {
@@ -302,6 +329,7 @@ function currentBackupSettings() {
     background: backgroundSelect.value,
     qqExportSize: loadQqExportSizeKey(),
     uiTheme: loadUiThemeKey(),
+    textKeyboard: loadTextKeyboardMode(),
   };
 }
 
@@ -310,6 +338,7 @@ function applyBackupSettings(settings) {
   if (typeof settings.lineText === "string") lineText.value = settings.lineText.slice(0, 180);
   if (typeof settings.uiTheme === "string") saveUiThemeKey(settings.uiTheme);
   if (typeof settings.qqExportSize === "string") saveQqExportSizeKey(settings.qqExportSize);
+  if (typeof settings.textKeyboard === "string") saveTextKeyboardMode(settings.textKeyboard);
   reloadAndRefreshSelections(settings.character, settings.background);
   if (settings.emotion && Array.from(emotionSelect.options).some((option) => option.value === settings.emotion)) {
     emotionSelect.value = settings.emotion;
@@ -406,15 +435,23 @@ function backgroundItems() {
     id: item.id,
     custom: true,
     label: item.label || `自定义背景 ${index + 1}`,
-    src: item.src,
+    src: assetSource(item),
   })));
+}
+
+function assetSource(item) {
+  if (item.sha256 && typeof item.src === "string" && item.src.startsWith("https://appassets.androidplatform.net/")) {
+    return `${item.src}${item.src.includes("?") ? "&" : "?"}v=${encodeURIComponent(item.sha256)}`;
+  }
+  return item.src;
 }
 
 function customCharacters() {
   return assetState.characters.map((item, index) => {
     const emotions = assetState.emotions
       .filter((emotion) => emotion.ownerId === item.id)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((emotion) => ({ ...emotion, src: assetSource(emotion) }));
     return {
       key: item.id,
       id: item.id,
@@ -422,9 +459,9 @@ function customCharacters() {
       name: item.label || `自定义角色 ${index + 1}`,
       emotions: Math.max(1, emotions.length),
       emotionItems: emotions,
-      src: item.src,
+      src: assetSource(item),
       fit: item.fit || { x: 0, y: ROLE_TOP, w: 720, h: 700 },
-      nameBlocks: item.nameBlocks || [{
+      nameBlocks: Array.isArray(item.nameBlocks) ? item.nameBlocks.slice(0, 32) : [{
         id: `name-${item.id}`,
         text: item.label || `角色 ${index + 1}`,
         x: 759,
@@ -458,15 +495,51 @@ function refreshBackgroundOptions(preferredKey) {
   updateControlLabels();
 }
 
-function saveGeneratorState() {
+function saveGeneratorState(explicitPatch) {
   try {
-    localStorage.setItem(STORAGE_KEYS.lineText, lineText.value);
-    localStorage.setItem(STORAGE_KEYS.character, characterSelect.value);
-    localStorage.setItem(STORAGE_KEYS.emotion, emotionSelect.value);
-    localStorage.setItem(STORAGE_KEYS.background, backgroundSelect.value);
+    const values = { text: lineText.value, character: characterSelect.value, emotion: emotionSelect.value, background: backgroundSelect.value };
+    const patch = explicitPatch || Object.fromEntries(Object.entries(values).filter(([key, value]) => generatorSnapshot[key] !== value));
+    generatorSnapshot = window.MahouState.update(patch);
   } catch (error) {
-    console.warn("Failed to save state", error);
+    showAppNotice("未能保存当前台词，请重试");
   }
+}
+
+function applyGeneratorState(state, changedFields) {
+  if (!state) return;
+  let fullRefresh = !Array.isArray(changedFields);
+  const changed = new Set(fullRefresh ? ["text", "character", "emotion", "background"] : changedFields);
+  if (!fullRefresh && changed.size === 0) return;
+
+  if (fullRefresh || changed.has("character") || changed.has("background")) {
+    if (!characterItems().some((item) => item.key === state.character)
+        || !backgroundItems().some((item) => item.key === state.background)) {
+      reloadAssets();
+      fullRefresh = true;
+    }
+  }
+  generatorSnapshot = { ...state };
+  if (changed.has("text") && typeof state.text === "string" && lineText.value !== state.text) lineText.value = state.text;
+  if (fullRefresh || changed.has("character")) refreshCharacterOptions(state.character);
+  if (fullRefresh || changed.has("background")) refreshBackgroundOptions(state.background);
+  if (fullRefresh || changed.has("character") || changed.has("emotion")) updateEmotionOptions(state.emotion);
+  window.dispatchEvent(new CustomEvent("generatorchange", {
+    detail: { ...state, changedFields: fullRefresh ? ["text", "character", "emotion", "background"] : [...changed] },
+  }));
+  requestRender();
+}
+
+window.receiveGeneratorState = (state) => window.MahouState.receive(state);
+
+function requestRender() {
+  if (pendingRenderFrame) return;
+  pendingRenderFrame = requestAnimationFrame(() => { pendingRenderFrame = 0; render(); });
+}
+
+function finishInput() {
+  if (document.activeElement && typeof document.activeElement.blur === "function") document.activeElement.blur();
+  document.documentElement.classList.remove("is-editing");
+  if (window.AndroidBridge && typeof window.AndroidBridge.dismissKeyboard === "function") window.AndroidBridge.dismissKeyboard();
 }
 
 function rgb(values) {
@@ -474,15 +547,43 @@ function rgb(values) {
 }
 
 function loadImage(src) {
-  if (!imageCache.has(src)) {
-    imageCache.set(src, new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`无法加载图片：${src}`));
-      img.src = src;
-    }));
+  const cached = imageCache.get(src);
+  if (cached) {
+    imageCache.delete(src);
+    imageCache.set(src, cached);
+    return cached;
   }
-  return imageCache.get(src);
+  let pending;
+  pending = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      if (imageCache.get(src) === pending) imageCache.delete(src);
+      reject(new Error(`无法加载图片：${src}`));
+    };
+    img.src = src;
+  });
+  imageCache.set(src, pending);
+  while (imageCache.size > MAX_CACHED_IMAGES) imageCache.delete(imageCache.keys().next().value);
+  return pending;
+}
+
+function canvasToDataUrl(source, mimeType = "image/png", quality) {
+  return new Promise((resolve, reject) => {
+    if (typeof source.toBlob !== "function") {
+      try { resolve(source.toDataURL(mimeType, quality)); }
+      catch (error) { reject(error); }
+      return;
+    }
+    source.toBlob((blob) => {
+      if (!blob) { reject(new Error("无法生成图片")); return; }
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === "string"
+        ? resolve(reader.result) : reject(new Error("图片读取失败"));
+      reader.onerror = () => reject(reader.error || new Error("图片读取失败"));
+      reader.readAsDataURL(blob);
+    }, mimeType, quality);
+  });
 }
 
 function fillSelect(select, items, valueGetter, labelGetter) {
@@ -540,7 +641,7 @@ function stepCharacter(delta) {
   characterSelect.value = items[next].key;
   updateEmotionOptions();
   saveGeneratorState();
-  render();
+  requestRender();
 }
 
 function stepNumericSelect(select, delta) {
@@ -550,7 +651,7 @@ function stepNumericSelect(select, delta) {
   select.value = options[next].value;
   updateControlLabels();
   saveGeneratorState();
-  render();
+  requestRender();
 }
 
 function chooseRandom() {
@@ -560,7 +661,7 @@ function chooseRandom() {
   backgroundSelect.value = backgrounds[Math.floor(Math.random() * backgrounds.length)].key;
   updateControlLabels();
   saveGeneratorState();
-  render();
+  requestRender();
 }
 
 function refreshCharacterOptions(preferredKey) {
@@ -569,33 +670,85 @@ function refreshCharacterOptions(preferredKey) {
   characterSelect.value = items.some((item) => item.key === preferredKey) ? preferredKey : (items.some((item) => item.key === characterSelect.value) ? characterSelect.value : "sherri");
 }
 
-function setupControls() {
-  const savedCharacter = localStorage.getItem(STORAGE_KEYS.character);
-  const savedEmotion = localStorage.getItem(STORAGE_KEYS.emotion);
-  const savedBackground = localStorage.getItem(STORAGE_KEYS.background);
-  const savedText = localStorage.getItem(STORAGE_KEYS.lineText);
+function fitInlineComposer() {
+  const stage = lineText.closest(".preview-stage");
+  if (!stage) return;
+  if (document.activeElement !== lineText) { stage.style.maxWidth = ""; return; }
+  const composer = stage.closest(".inline-composer");
+  const content = composer.parentElement;
+  const styles = getComputedStyle(content);
+  const siblings = [...content.children].filter((item) => item !== composer && item.getBoundingClientRect().height > 0);
+  const otherHeight = siblings.reduce((sum, item) => sum + item.getBoundingClientRect().height, 0);
+  const toolsHeight = composer.querySelector(".composer-tools").getBoundingClientRect().height;
+  const room = content.clientHeight - otherHeight - toolsHeight - 2
+    - (parseFloat(styles.rowGap) || 0) * siblings.length
+    - (parseFloat(styles.paddingTop) || 0) - (parseFloat(styles.paddingBottom) || 0);
+  // Keep the image and controls inside the keyboard-reduced viewport without stretching it.
+  stage.style.maxWidth = `${Math.max(1, room) * CANVAS_WIDTH / CANVAS_HEIGHT}px`;
+  content.scrollTop = 0;
+}
 
-  if (savedText !== null) {
-    lineText.value = savedText;
+window.setupImageDoubleTap = function setupImageDoubleTap(surface, action) {
+  let down = null, previous = null, pointerActivatedAt = -1000;
+  function activate() {
+    action();
   }
+  surface.setAttribute("role", "button");
+  surface.setAttribute("aria-label", "编辑图片内台词");
+  surface.tabIndex = 0;
+  surface.addEventListener("pointerdown", (event) => {
+    if (event.isPrimary && event.button === 0) down = { x: event.clientX, y: event.clientY, time: event.timeStamp, id: event.pointerId };
+  });
+  surface.addEventListener("pointercancel", () => { down = previous = null; });
+  surface.addEventListener("pointerup", (event) => {
+    if (!down || down.id !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
+    const tap = moved < 12 && event.timeStamp - down.time < 350;
+    down = null;
+    if (!tap) { previous = null; return; }
+    if (previous && event.timeStamp - previous.time < 360 && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) < 24) {
+      previous = null;
+      pointerActivatedAt = event.timeStamp;
+      activate();
+    } else previous = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+  });
+  surface.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    if (event.timeStamp - pointerActivatedAt > 500) activate();
+  });
+  surface.addEventListener("click", (event) => { if (event.detail === 0) activate(); });
+  surface.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); }
+  });
+};
 
-  refreshCharacterOptions(savedCharacter);
-  refreshBackgroundOptions(savedBackground);
-  updateEmotionOptions(savedEmotion);
+window.beginInlineTextEditing = function beginInlineTextEditing() {
+  if (!lineText.classList.contains("inline-line-text")) return;
+  const alreadyEditing = document.activeElement === lineText;
+  lineText.readOnly = false;
+  lineText.tabIndex = 0;
+  lineText.focus();
+  if (!alreadyEditing) lineText.setSelectionRange(lineText.value.length, lineText.value.length);
+};
+
+function setupControls() {
+  generatorSnapshot = window.MahouState.initialize({ text: lineText.value, character: "ema", emotion: "1", background: "builtin-1" });
+  applyGeneratorState(generatorSnapshot);
+  window.MahouState.subscribe(applyGeneratorState);
 
   characterSelect.addEventListener("change", () => {
     updateEmotionOptions();
     saveGeneratorState();
-    render();
+    requestRender();
   });
   emotionSelect.addEventListener("change", () => {
     saveGeneratorState();
-    render();
+    requestRender();
   });
   backgroundSelect.addEventListener("change", () => {
     updateControlLabels();
     saveGeneratorState();
-    render();
+    requestRender();
   });
   characterPrev.addEventListener("click", () => stepCharacter(-1));
   characterNext.addEventListener("click", () => stepCharacter(1));
@@ -604,17 +757,31 @@ function setupControls() {
   backgroundPrev.addEventListener("click", () => stepNumericSelect(backgroundSelect, -1));
   backgroundNext.addEventListener("click", () => stepNumericSelect(backgroundSelect, 1));
   lineText.addEventListener("input", () => {
-    saveGeneratorState();
-    render();
+    saveGeneratorState({ text: lineText.value });
+    requestRender();
   });
+  if (lineText.classList.contains("inline-line-text")) {
+    const refreshEditor = () => { requestAnimationFrame(fitInlineComposer); requestRender(); };
+    lineText.addEventListener("focus", refreshEditor);
+    lineText.addEventListener("blur", () => { lineText.readOnly = true; lineText.tabIndex = -1; refreshEditor(); });
+    if (window.ResizeObserver) new ResizeObserver(fitInlineComposer).observe(lineText.closest(".workspace-content"));
+    else window.addEventListener("resize", fitInlineComposer);
+    window.setupImageDoubleTap(canvas, window.beginInlineTextEditing);
+    $("editTextButton")?.addEventListener("click", window.beginInlineTextEditing);
+    for (const id of ["editTextButton", "randomButton", "clearTextButton"]) {
+      $(id)?.addEventListener("pointerdown", (event) => {
+        if (document.activeElement === lineText) event.preventDefault();
+      });
+    }
+  }
   setupKeyboardDoneButton();
-  popupButton.addEventListener("click", startPopupMode);
-  randomButton.addEventListener("click", chooseRandom);
-  addBackgroundButton.addEventListener("click", addBackground);
-  assetManagerButton.addEventListener("click", openAssetManager);
-  aboutButton.addEventListener("click", openAboutModal);
-  qqButton.addEventListener("click", shareToQQ);
-  shareButton.addEventListener("click", shareImage);
+  popupButton?.addEventListener("click", startPopupMode);
+  randomButton?.addEventListener("click", chooseRandom);
+  addBackgroundButton?.addEventListener("click", addBackground);
+  assetManagerButton?.addEventListener("click", openAssetManager);
+  aboutButton?.addEventListener("click", openAboutModal);
+  qqButton?.addEventListener("click", shareToQQ);
+  shareButton?.addEventListener("click", shareImage);
   if (qqExportSizePrev && qqExportSizeNext) {
     updateQqExportSizeLabel();
     qqExportSizePrev.addEventListener("click", () => stepQqExportSize(-1));
@@ -625,14 +792,15 @@ function setupControls() {
     uiThemePrev.addEventListener("click", () => stepUiTheme(-1));
     uiThemeNext.addEventListener("click", () => stepUiTheme(1));
   }
-  if (isPopupMode) {
+  if (isPopupMode && popupButton) {
     popupButton.setAttribute("hidden", "hidden");
   }
   updateControlLabels();
 }
 
 function setupKeyboardDoneButton() {
-  if (document.querySelector("[data-keyboard-done]")) return;
+  const existing = document.querySelector("[data-keyboard-done]");
+  if (existing) { existing.addEventListener("click", finishInput); return; }
   const button = document.createElement("button");
   button.type = "button";
   button.className = "keyboard-done";
@@ -640,25 +808,25 @@ function setupKeyboardDoneButton() {
   button.textContent = "完成输入";
   button.setAttribute("aria-label", "收起键盘并完成输入");
   button.addEventListener("click", () => {
-    lineText.blur();
-    render();
+    finishInput();
+    requestRender();
   });
   lineText.insertAdjacentElement("afterend", button);
 }
 
-function setTextFont(size) {
-  ctx.font = `${size}px MahouFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
-  ctx.textBaseline = "top";
+function setTextFont(size, context = ctx) {
+  context.font = `${size}px MahouFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+  context.textBaseline = "top";
 }
 
-function wrapParagraph(paragraph, maxWidth) {
+function wrapParagraph(paragraph, maxWidth, context = ctx) {
   const units = paragraph.includes(" ") ? paragraph.split(/(\s+)/) : Array.from(paragraph);
   const lines = [];
   let buffer = "";
 
   for (const unit of units) {
     const trial = buffer + unit;
-    if (ctx.measureText(trial).width <= maxWidth) {
+    if (context.measureText(trial).width <= maxWidth) {
       buffer = trial;
       continue;
     }
@@ -668,10 +836,10 @@ function wrapParagraph(paragraph, maxWidth) {
     }
     buffer = unit.trimStart();
 
-    while (ctx.measureText(buffer).width > maxWidth && buffer.length > 1) {
+    while (context.measureText(buffer).width > maxWidth && buffer.length > 1) {
       let slice = "";
       for (const char of Array.from(buffer)) {
-        if (ctx.measureText(slice + char).width > maxWidth) break;
+        if (context.measureText(slice + char).width > maxWidth) break;
         slice += char;
       }
       lines.push(slice);
@@ -685,27 +853,27 @@ function wrapParagraph(paragraph, maxWidth) {
   return lines.length ? lines : [""];
 }
 
-function wrapText(text, fontSize, maxWidth) {
-  setTextFont(fontSize);
-  return text.split(/\r?\n/).flatMap((paragraph) => wrapParagraph(paragraph, maxWidth));
+function wrapText(text, fontSize, maxWidth, context = ctx) {
+  setTextFont(fontSize, context);
+  return text.split(/\r?\n/).flatMap((paragraph) => wrapParagraph(paragraph, maxWidth, context));
 }
 
-function measureBlock(lines, fontSize) {
-  setTextFont(fontSize);
+function measureBlock(lines, fontSize, context = ctx) {
+  setTextFont(fontSize, context);
   const lineHeight = Math.round(fontSize * 1.22);
-  const width = Math.max(0, ...lines.map((line) => ctx.measureText(line).width));
+  const width = Math.max(0, ...lines.map((line) => context.measureText(line).width));
   return { width, height: Math.max(lineHeight, lines.length * lineHeight), lineHeight };
 }
 
-function fitText(text, maxWidth, maxHeight) {
+function fitText(text, maxWidth, maxHeight, context = ctx) {
   let lo = 12;
   let hi = 145;
-  let best = { size: 12, lines: wrapText(text, 12, maxWidth), lineHeight: 15, height: 15 };
+  let best = { size: 12, lines: wrapText(text, 12, maxWidth, context), lineHeight: 15, height: 15 };
 
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
-    const lines = wrapText(text, mid, maxWidth);
-    const block = measureBlock(lines, mid);
+    const lines = wrapText(text, mid, maxWidth, context);
+    const block = measureBlock(lines, mid, context);
     if (block.width <= maxWidth && block.height <= maxHeight) {
       best = { size: mid, lines, lineHeight: block.lineHeight, height: block.height };
       lo = mid + 1;
@@ -716,7 +884,7 @@ function fitText(text, maxWidth, maxHeight) {
   return best;
 }
 
-function drawSegmentedText(text, x, y, baseColor, bracketColor) {
+function drawSegmentedText(text, x, y, baseColor, bracketColor, context = ctx) {
   let activeBracket = false;
   let cursor = x;
 
@@ -726,11 +894,11 @@ function drawSegmentedText(text, x, y, baseColor, bracketColor) {
     }
 
     const color = activeBracket ? bracketColor : baseColor;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
-    ctx.fillText(char, cursor + 4, y + 4);
-    ctx.fillStyle = color;
-    ctx.fillText(char, cursor, y);
-    cursor += ctx.measureText(char).width;
+    context.fillStyle = "rgba(0, 0, 0, 0.82)";
+    context.fillText(char, cursor + 4, y + 4);
+    context.fillStyle = color;
+    context.fillText(char, cursor, y);
+    cursor += context.measureText(char).width;
 
     if (char === "]" || char === "】") {
       activeBracket = false;
@@ -738,46 +906,46 @@ function drawSegmentedText(text, x, y, baseColor, bracketColor) {
   }
 }
 
-function drawDialogText(character) {
+function drawDialogText(character, context = ctx) {
   const [x1, y1] = TEXT_TOP_LEFT;
   const [x2, y2] = TEXT_BOTTOM_RIGHT;
   const text = lineText.value.trim() || " ";
-  const fitted = fitText(text, x2 - x1, y2 - y1);
+  const fitted = fitText(text, x2 - x1, y2 - y1, context);
   const bracketColor = character.key === "anan" ? rgb(character.color) : "rgb(137, 177, 251)";
-  setTextFont(fitted.size);
+  setTextFont(fitted.size, context);
 
   let y = y1;
   for (const line of fitted.lines) {
-    drawSegmentedText(line, x1, y, "rgb(255, 255, 255)", bracketColor);
+    drawSegmentedText(line, x1, y, "rgb(255, 255, 255)", bracketColor, context);
     y += fitted.lineHeight;
     if (y > y2) break;
   }
 }
 
-function drawCharacterName(character) {
+function drawCharacterName(character, context = ctx) {
   if (character.custom) {
     for (const block of character.nameBlocks || []) {
       const text = block.text || "";
       if (!text) continue;
       const size = Number(block.size) || 120;
-      ctx.font = `${size}px MahouFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
-      ctx.textBaseline = "top";
-      ctx.fillStyle = "rgb(0, 0, 0)";
-      ctx.fillText(text, Number(block.x) + 3, Number(block.y) + 3);
-      ctx.fillStyle = block.color || "#ffffff";
-      ctx.fillText(text, Number(block.x), Number(block.y));
+      context.font = `${size}px MahouFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+      context.textBaseline = "top";
+      context.fillStyle = "rgb(0, 0, 0)";
+      context.fillText(text, Number(block.x) + 3, Number(block.y) + 3);
+      context.fillStyle = block.color || "#ffffff";
+      context.fillText(text, Number(block.x), Number(block.y));
     }
     return;
   }
 
   for (const [text, x, y, size, color] of character.nameParts) {
     if (!text) continue;
-    ctx.font = `${size}px MahouFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "rgb(0, 0, 0)";
-    ctx.fillText(text, x + 2, y + 2);
-    ctx.fillStyle = color ? rgb(color) : "rgb(255, 255, 255)";
-    ctx.fillText(text, x, y);
+    context.font = `${size}px MahouFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    context.textBaseline = "top";
+    context.fillStyle = "rgb(0, 0, 0)";
+    context.fillText(text, x + 2, y + 2);
+    context.fillStyle = color ? rgb(color) : "rgb(255, 255, 255)";
+    context.fillText(text, x, y);
   }
 }
 
@@ -789,45 +957,93 @@ function roleSource(character, emotionIndex) {
   return (emotion && emotion.src) || character.src;
 }
 
-function drawRoleImage(role, character) {
+function drawRoleImage(role, character, context = ctx) {
   if (!character.custom) {
-    ctx.drawImage(role, 0, ROLE_TOP);
+    context.drawImage(role, 0, ROLE_TOP);
     return;
   }
   const fit = character.fit || { x: 0, y: ROLE_TOP, w: 720, h: 700 };
-  ctx.drawImage(role, Number(fit.x) || 0, Number(fit.y) || ROLE_TOP, Number(fit.w) || 720, Number(fit.h) || 700);
+  context.drawImage(role, Number.isFinite(Number(fit.x)) ? Number(fit.x) : 0, Number.isFinite(Number(fit.y)) ? Number(fit.y) : ROLE_TOP, Number(fit.w) || 720, Number(fit.h) || 700);
 }
 
-async function render() {
+function ensureFont() {
+  if (!fontReady) fontReady = document.fonts.load("145px MahouFont");
+  return fontReady;
+}
+
+async function render(options = {}) {
   const token = ++renderToken;
+  const targetCanvas = options.targetCanvas || canvas;
+  const requestedWidth = options.targetWidth || (targetCanvas === canvas ? getPreviewRenderWidth() : CANVAS_WIDTH);
+  const targetWidth = Math.max(1, Math.min(CANVAS_WIDTH, Math.round(requestedWidth)));
+  const targetHeight = Math.round(CANVAS_HEIGHT * targetWidth / CANVAS_WIDTH);
+  const scale = targetWidth / CANVAS_WIDTH;
   const character = currentCharacter();
   const backgroundItem = currentBackground();
   const emotionIndex = Number(emotionSelect.value) || 1;
-
-  ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  ctx.fillStyle = "#111218";
-  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
   try {
     const [backgroundImage, role] = await Promise.all([
       loadImage(backgroundItem.src),
       loadImage(roleSource(character, emotionIndex)),
-      document.fonts.ready,
+      ensureFont(),
     ]);
-    if (token !== renderToken) return;
-    ctx.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    drawRoleImage(role, character);
-    drawDialogText(character);
-    drawCharacterName(character);
+    if (token !== renderToken) return false;
+    if (targetCanvas.width !== targetWidth || targetCanvas.height !== targetHeight) {
+      targetCanvas.width = targetWidth;
+      targetCanvas.height = targetHeight;
+    }
+    const context = targetCanvas.getContext("2d");
+    if (!context) return false;
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    context.fillStyle = "#111218";
+    context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    context.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    drawRoleImage(role, character, context);
+    const editingInline = (lineText.classList.contains("inline-line-text") && document.activeElement === lineText)
+      || Boolean(window.isImeDraftEditing?.());
+    if (options.forceDialogText || !editingInline) drawDialogText(character, context);
+    drawCharacterName(character, context);
+    return true;
   } catch (error) {
-    ctx.fillStyle = "#fff";
-    ctx.font = "48px sans-serif";
-    ctx.fillText(error.message, 60, 80);
+    if (token !== renderToken) return false;
+    if (targetCanvas.width !== targetWidth || targetCanvas.height !== targetHeight) {
+      targetCanvas.width = targetWidth;
+      targetCanvas.height = targetHeight;
+    }
+    const context = targetCanvas.getContext("2d");
+    if (context) {
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      context.fillStyle = "#111218";
+      context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      context.fillStyle = "#fff";
+      context.font = "48px sans-serif";
+      context.fillText("素材无法加载，请重新选择", 60, 80);
+    }
+    return false;
   }
 }
 
-function canvasToBlob() {
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+function getPreviewRenderWidth() {
+  const cssWidth = canvas.clientWidth;
+  if (!cssWidth) return previewRenderWidth;
+  const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
+  previewRenderWidth = Math.max(360, Math.min(CANVAS_WIDTH, PREVIEW_MAX_WIDTH, Math.round(cssWidth * pixelRatio)));
+  return previewRenderWidth;
+}
+
+function dataUrlToBlob(dataUrl) {
+  const separator = dataUrl.indexOf(",");
+  if (separator < 0) throw new Error("图片数据无效");
+  const header = dataUrl.slice(0, separator);
+  const mime = (header.match(/^data:([^;]+)/) || [])[1] || "image/png";
+  const binary = atob(dataUrl.slice(separator + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
 }
 
 function normalizeQqExportSizeKey(key) {
@@ -864,18 +1080,6 @@ function stepQqExportSize(delta) {
   updateQqExportSizeLabel();
 }
 
-function androidExportDataUrl(exportWidth = SHARE_EXPORT_WIDTH) {
-  const width = Math.min(Math.max(1, Math.round(exportWidth)), CANVAS_WIDTH);
-  const scale = width / CANVAS_WIDTH;
-  const height = Math.round(CANVAS_HEIGHT * scale);
-  const exportCanvas = document.createElement("canvas");
-  exportCanvas.width = width;
-  exportCanvas.height = height;
-  const exportContext = exportCanvas.getContext("2d");
-  exportContext.drawImage(canvas, 0, 0, width, height);
-  return exportCanvas.toDataURL("image/png");
-}
-
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -902,7 +1106,7 @@ async function normalizeCustomImage(dataUrl, maxEdge = 1280) {
   exportCanvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
   exportCanvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
   exportCanvas.getContext("2d").drawImage(img, 0, 0, exportCanvas.width, exportCanvas.height);
-  return exportCanvas.toDataURL("image/jpeg", 0.88);
+  return canvasToDataUrl(exportCanvas, "image/jpeg", 0.88);
 }
 
 async function addBackgroundFromBrowserFile(file) {
@@ -962,73 +1166,102 @@ function uid(prefix) {
 }
 
 function openOverlay(element, historyName) {
+  if (element.classList.contains("open")) return;
+  const returnFocus = document.activeElement;
+  finishInput();
+  overlayStack.push({ element, returnFocus });
+  element.setAttribute("role", "dialog");
+  element.setAttribute("aria-modal", "true");
+  element.tabIndex = -1;
   element.classList.add("open");
-  if (!element.dataset.historyOpen) {
+  if (!element.dataset.historyOpen && !document.documentElement.classList.contains("ime-mode")) {
     element.dataset.historyOpen = historyName;
     history.pushState({ mahouOverlay: historyName }, "", location.href);
   }
+  syncOverlayFocus();
+  const first = element.querySelector("[autofocus], button:not([disabled]), input, textarea");
+  requestAnimationFrame(() => (first || element).focus({ preventScroll: true }));
 }
 
 function closeOverlay(element, syncHistory = true) {
   if (!element || !element.classList.contains("open")) return;
+  const entry = overlayStack.find((item) => item.element === element);
   element.classList.remove("open");
+  const index = overlayStack.findIndex((item) => item.element === element);
+  if (index >= 0) overlayStack.splice(index, 1);
   delete element.dataset.historyOpen;
   if (syncHistory && history.state && history.state.mahouOverlay) {
     suppressNextOverlayPop = true;
     history.back();
   }
+  syncOverlayFocus();
+  if (entry && entry.returnFocus && entry.returnFocus.isConnected && !entry.returnFocus.closest("[inert]")) {
+    entry.returnFocus.focus({ preventScroll: true });
+  }
+}
+
+function activeOverlay() {
+  return overlayStack.length ? overlayStack[overlayStack.length - 1].element : null;
+}
+
+function syncOverlayFocus() {
+  const active = activeOverlay();
+  for (const element of document.body.children) {
+    if (element.tagName === "SCRIPT" || element.classList.contains("app-notice")) continue;
+    element.inert = Boolean(active && element !== active);
+    if (element.inert) element.setAttribute("aria-hidden", "true");
+    else element.removeAttribute("aria-hidden");
+  }
+  if (window.AndroidBridge && typeof window.AndroidBridge.setEditorExpanded === "function") {
+    window.AndroidBridge.setEditorExpanded(Boolean(active));
+  }
+  scheduleAccessibilityReport();
 }
 
 function closeTopOverlayFromHistory() {
-  const aboutModal = document.querySelector(".about-modal.open");
-  if (aboutModal) {
-    closeOverlay(aboutModal, false);
-    return true;
-  }
-  const nameEditor = document.querySelector(".name-editor.open");
-  if (nameEditor) {
-    closeOverlay(nameEditor, false);
-    return true;
-  }
-  const cropEditor = document.querySelector(".crop-editor.open");
-  if (cropEditor) {
-    closeOverlay(cropEditor, false);
-    return true;
-  }
-  const assetModal = document.querySelector(".asset-modal.open");
-  if (assetModal) {
-    closeOverlay(assetModal, false);
-    return true;
-  }
-  return false;
+  const active = activeOverlay();
+  if (!active) return false;
+  if (active.finish) active.finish(false, false);
+  else closeOverlay(active, false);
+  return true;
 }
 
 window.handleAndroidBack = function handleAndroidBack() {
-  const confirmDialog = document.querySelector(".confirm-dialog.open");
-  if (confirmDialog) {
-    confirmDialog.classList.remove("open");
-    return true;
-  }
-  if (closeTopOverlayFromHistory()) {
-    return true;
-  }
-  const nameEditor = document.querySelector(".name-editor.open");
-  if (nameEditor) {
-    closeOverlay(nameEditor, false);
-    return true;
-  }
-  const cropEditor = document.querySelector(".crop-editor.open");
-  if (cropEditor) {
-    closeOverlay(cropEditor, false);
-    return true;
-  }
-  const assetModal = document.querySelector(".asset-modal.open");
-  if (assetModal) {
-    closeOverlay(assetModal, false);
+  if (document.documentElement.classList.contains("is-editing")) { finishInput(); return true; }
+  const active = activeOverlay();
+  if (active) {
+    if (active.finish) active.finish(false);
+    else closeOverlay(active);
     return true;
   }
   return false;
 };
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && window.handleAndroidBack()) { event.preventDefault(); return; }
+  const active = activeOverlay();
+  if (event.key !== "Tab" || !active) return;
+  const items = Array.from(active.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea,[tabindex="0"]'))
+    .filter((item) => !item.hidden && item.getBoundingClientRect().width > 0);
+  if (!items.length) { event.preventDefault(); active.focus(); return; }
+  if (event.shiftKey && (document.activeElement === items[0] || !active.contains(document.activeElement))) {
+    event.preventDefault(); items[items.length - 1].focus();
+  } else if (!event.shiftKey && (document.activeElement === items[items.length - 1] || !active.contains(document.activeElement))) {
+    event.preventDefault(); items[0].focus();
+  }
+});
+
+document.addEventListener("focusin", (event) => {
+  const editable = event.target.matches("textarea,input:not([type=range]):not([type=color])");
+  document.documentElement.classList.toggle("is-editing", editable);
+  if (window.AndroidBridge && typeof window.AndroidBridge.setEditing === "function") window.AndroidBridge.setEditing(editable);
+});
+document.addEventListener("focusout", () => setTimeout(() => {
+  if (!document.activeElement.matches("textarea,input:not([type=range]):not([type=color])")) {
+    document.documentElement.classList.remove("is-editing");
+    if (window.AndroidBridge && typeof window.AndroidBridge.setEditing === "function") window.AndroidBridge.setEditing(false);
+  }
+}, 0));
 
 window.addEventListener("popstate", () => {
   if (suppressNextOverlayPop) {
@@ -1050,7 +1283,7 @@ function scrollAssetIntoView(id) {
   setTimeout(doScroll, 800);
 }
 
-function showConfirmDialog({ title, message, confirmText = "删除", cancelText = "取消", danger = true }) {
+function showConfirmDialog({ title, message, confirmText = "删除", cancelText = "取消", danger = true, inputValue = null }) {
   return new Promise((resolve) => {
     let dialog = document.querySelector(".confirm-dialog");
     if (!dialog) {
@@ -1060,6 +1293,7 @@ function showConfirmDialog({ title, message, confirmText = "删除", cancelText 
         <div class="confirm-card" role="dialog" aria-modal="true">
           <strong data-confirm-title></strong>
           <p data-confirm-message></p>
+          <input data-confirm-input aria-label="素材名称" maxlength="80" hidden />
           <div class="confirm-actions">
             <button type="button" data-confirm-cancel></button>
             <button type="button" data-confirm-ok></button>
@@ -1070,19 +1304,25 @@ function showConfirmDialog({ title, message, confirmText = "删除", cancelText 
     }
     dialog.querySelector("[data-confirm-title]").textContent = title;
     dialog.querySelector("[data-confirm-message]").textContent = message;
+    const input = dialog.querySelector("[data-confirm-input]");
+    input.hidden = inputValue === null;
+    input.value = inputValue || "";
     dialog.querySelector("[data-confirm-cancel]").textContent = cancelText;
     const ok = dialog.querySelector("[data-confirm-ok]");
     ok.textContent = confirmText;
     ok.classList.toggle("danger", danger);
-    dialog.classList.add("open");
-    const finish = (value) => {
-      dialog.classList.remove("open");
+    openOverlay(dialog, "confirm");
+    const finish = (value, syncHistory = true) => {
+      closeOverlay(dialog, syncHistory);
       dialog.querySelector("[data-confirm-cancel]").onclick = null;
       ok.onclick = null;
-      resolve(value);
+      dialog.finish = null;
+      resolve(inputValue === null ? value : (value ? input.value.trim() : null));
     };
+    dialog.finish = finish;
     dialog.querySelector("[data-confirm-cancel]").onclick = () => finish(false);
     ok.onclick = () => finish(true);
+    if (inputValue !== null) requestAnimationFrame(() => { input.focus(); input.select(); });
   });
 }
 
@@ -1145,9 +1385,10 @@ function ensureAboutModal() {
         <div><dt>更新</dt><dd>请从原下载渠道手动获取新版</dd></div>
       </dl>
       <h2>本地与隐私</h2>
-      <p>台词、自定义背景、角色和表情只保存在本机。应用不联网，也不会上传素材；只有你主动分享时，生成的图片才会交给所选目标应用。</p>
+      <p>台词和素材保存在本机，离线拼音也不联网。读取草稿仅在你点击后执行，密码不会读取或保存。发送按钮会尝试把图片放进 QQ 输入框；若 QQ 不接收，图片会保存到相册，请点输入框右侧“+”→“相册”选择最新的魔裁图片发送。应用不会自动替你发出消息或选择联系人，也不需要 Root。</p>
+      <p>离线拼音使用 simple-ime（MIT）、dawg-lookup（MIT）和 lru-cache（ISC），许可证随应用附带。</p>
       <h2>权限用途</h2>
-      <p>悬浮窗权限用于在 QQ 等应用上方显示生成器；通知权限用于提示悬浮窗正在运行，并提供恢复和关闭入口；文件选择器仅在你导入、备份或恢复素材时打开。</p>
+      <p>悬浮窗权限用于在 QQ 等应用上方显示生成器；通知权限用于提示悬浮窗正在运行，并提供恢复和关闭入口；文件选择器仅在你导入、备份或恢复素材时打开。麦克风权限仅在你点内置键盘的语音按钮时请求，手机的语音识别服务可能联网处理语音。</p>
       <h2>项目与许可</h2>
       <p>本项目基于原魔法少女文本框工具继续开发，程序代码依照 MIT License 提供。内置角色与背景由发布者确认拥有公开分发权。</p>
       <p class="about-limit">应用不能自动选择 QQ 群或代替用户发送消息。</p>
@@ -1183,12 +1424,31 @@ function renderAssetManager(options = {}) {
   if (currentAssetTab === "character") renderCharacterManager(content);
   if (currentAssetTab === "emotion") renderEmotionManager(content);
   if (options.resetScroll) content.scrollTop = 0;
+  markAssetSelection();
   if (pendingAssetScrollId) {
     scrollAssetIntoView(pendingAssetScrollId);
     pendingAssetScrollId = "";
   }
   updateStorageUsage();
 }
+
+function markAssetSelection(event) {
+  const changedFields = event && event.detail && event.detail.changedFields;
+  if (Array.isArray(changedFields) && changedFields.length === 1 && changedFields[0] === "text") return;
+  const modal = document.querySelector(".asset-modal.open");
+  if (!modal) return;
+  const character = currentCharacter();
+  const selected = currentAssetTab === "background" ? backgroundSelect.value
+    : currentAssetTab === "character" ? characterSelect.value
+      : character.custom ? currentEmotionItem(character)?.id : `${character.key}-${emotionSelect.value}`;
+  modal.querySelectorAll(".asset-card").forEach((card) => {
+    const active = card.dataset.assetId === selected;
+    card.classList.toggle("is-selected", active);
+    const use = card.querySelector("[data-use]");
+    if (use) { use.textContent = active ? "当前" : "使用"; use.setAttribute("aria-pressed", String(active)); }
+  });
+}
+window.addEventListener("generatorchange", markAssetSelection);
 
 function renderBackgroundManager(content) {
   const items = backgroundItems();
@@ -1213,11 +1473,11 @@ function renderBackgroundManager(content) {
     if ((item.id || item.key) === pendingAssetHighlightId) card.classList.add("is-highlighted");
     card.dataset.assetId = item.id || item.key;
     card.innerHTML = `
-      <img src="${item.src}" alt="${item.label}">
-      <strong>${item.label}</strong>
+      <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.label)}" loading="lazy">
+      <strong>${escapeHtml(item.label)}</strong>
       <div class="card-actions">
         <button type="button" data-use>使用</button>
-        ${item.custom ? '<button type="button" data-delete>删除</button>' : '<button type="button" disabled>内置</button>'}
+        ${item.custom ? '<button type="button" data-rename>改名</button><button type="button" data-delete>删除</button>' : '<button type="button" disabled>内置</button>'}
       </div>
     `;
     card.querySelector("[data-use]").addEventListener("click", () => {
@@ -1227,6 +1487,7 @@ function renderBackgroundManager(content) {
       render();
     });
     const deleteButton = card.querySelector("[data-delete]");
+    card.querySelector("[data-rename]")?.addEventListener("click", () => renameAsset(item.id, item.label));
     if (deleteButton) {
       deleteButton.addEventListener("click", () => deleteAssetWithConfirm("background", item.id, item.label));
     }
@@ -1258,11 +1519,11 @@ function renderCharacterManager(content) {
     if ((item.id || item.key) === pendingAssetHighlightId) card.classList.add("is-highlighted");
     card.dataset.assetId = item.id || item.key;
     card.innerHTML = `
-      <img src="${imageSrc}" alt="${item.name}">
-      <strong>${item.name}</strong>
+      <img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(item.name)}" loading="lazy">
+      <strong>${escapeHtml(item.name)}</strong>
       <div class="card-actions">
         <button type="button" data-use>使用</button>
-        ${item.custom ? '<button type="button" data-name>姓名</button><button type="button" data-delete>删除</button>' : '<button type="button" disabled>内置</button>'}
+        ${item.custom ? '<button type="button" data-rename>改名</button><button type="button" data-name>姓名</button><button type="button" data-delete>删除</button>' : '<button type="button" disabled>内置</button>'}
       </div>
     `;
     card.querySelector("[data-use]").addEventListener("click", () => {
@@ -1272,6 +1533,7 @@ function renderCharacterManager(content) {
       render();
     });
     const nameButton = card.querySelector("[data-name]");
+    card.querySelector("[data-rename]")?.addEventListener("click", () => renameAsset(item.id, item.name));
     if (nameButton) nameButton.addEventListener("click", () => openNameEditor(item));
     const deleteButton = card.querySelector("[data-delete]");
     if (deleteButton) deleteButton.addEventListener("click", () => deleteAssetWithConfirm("character", item.id, item.name));
@@ -1284,12 +1546,13 @@ function renderEmotionManager(content) {
   if (!character.custom) {
     content.innerHTML = `
       <div class="asset-actions">
-        <span>${character.name}</span>
+        <button type="button" data-choose-owner>${escapeHtml(character.name)}</button>
         <button type="button" data-scroll-top>回到顶部</button>
       </div>
       <div class="asset-grid"></div>
     `;
     content.querySelector("[data-scroll-top]").addEventListener("click", () => content.scrollTo({ top: 0, behavior: "smooth" }));
+    content.querySelector("[data-choose-owner]").addEventListener("click", () => window.openMaterialPicker("character"));
     const grid = content.querySelector(".asset-grid");
     for (let index = 1; index <= character.emotions; index++) {
       const card = document.createElement("article");
@@ -1313,7 +1576,7 @@ function renderEmotionManager(content) {
 
   content.innerHTML = `
     <div class="asset-actions">
-      <span>${character.name}</span>
+      <button type="button" data-choose-owner>${escapeHtml(character.name)}</button>
       <button type="button" data-add-emotion>添加表情</button>
     </div>
     <div class="asset-grid"></div>
@@ -1325,6 +1588,7 @@ function renderEmotionManager(content) {
   content.querySelectorAll("[data-add-emotion]").forEach((button) => {
     button.addEventListener("click", () => requestAssetImage("emotion", character.id));
   });
+  content.querySelector("[data-choose-owner]").addEventListener("click", () => window.openMaterialPicker("character"));
   content.querySelector("[data-scroll-top]").addEventListener("click", () => content.scrollTo({ top: 0, behavior: "smooth" }));
   const grid = content.querySelector(".asset-grid");
   character.emotionItems.forEach((item, index) => {
@@ -1333,10 +1597,13 @@ function renderEmotionManager(content) {
     if ((item.id || `${character.id}-${index}`) === pendingAssetHighlightId) card.classList.add("is-highlighted");
     card.dataset.assetId = item.id || `${character.id}-${index}`;
     card.innerHTML = `
-      <img src="${item.src}" alt="${item.label || `表情 ${index + 1}`}">
-      <strong>${item.label || `表情 ${index + 1}`}</strong>
+      <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.label || `表情 ${index + 1}`)}" loading="lazy">
+      <strong>${escapeHtml(item.label || `表情 ${index + 1}`)}</strong>
       <div class="card-actions">
         <button type="button" data-use>使用</button>
+        <button type="button" data-rename>改名</button>
+        <button type="button" data-up aria-label="将表情前移" ${index === 0 ? "disabled" : ""}>前移</button>
+        <button type="button" data-down aria-label="将表情后移" ${index === character.emotionItems.length - 1 ? "disabled" : ""}>后移</button>
         <button type="button" data-delete class="${character.emotionItems.length <= 1 ? "is-disabled" : ""}" aria-disabled="${character.emotionItems.length <= 1 ? "true" : "false"}">删除</button>
       </div>
     `;
@@ -1353,8 +1620,45 @@ function renderEmotionManager(content) {
       }
       deleteAssetWithConfirm("emotion", item.id, item.label || `表情 ${index + 1}`);
     });
+    card.querySelector("[data-rename]").addEventListener("click", () => renameAsset(item.id, item.label || `表情 ${index + 1}`));
+    card.querySelector("[data-up]").addEventListener("click", () => moveEmotion(item.id, -1));
+    card.querySelector("[data-down]").addEventListener("click", () => moveEmotion(item.id, 1));
     grid.appendChild(card);
   });
+}
+
+async function renameAsset(id, label) {
+  const name = await showConfirmDialog({ title: "修改素材名称", message: "名称", confirmText: "保存", danger: false, inputValue: label });
+  if (name === null) return;
+  if (!name) { showAppNotice("名称不能为空"); return; }
+  try {
+    nativeUpdateAsset(id, { label: name });
+    reloadAndRefreshSelections();
+    renderAssetManager();
+    requestRender();
+    window.dispatchEvent(new CustomEvent("assetschange"));
+    showAppNotice("名称已修改");
+  } catch (error) { showAppNotice(error.message || "改名失败，请重试"); }
+}
+
+function moveEmotion(id, direction) {
+  const character = currentCharacter();
+  const items = character.emotionItems.slice();
+  const index = items.findIndex((item) => item.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= items.length) return;
+  const selectedId = items[(Number(emotionSelect.value) || 1) - 1]?.id;
+  [items[index], items[target]] = [items[target], items[index]];
+  try {
+    items.forEach((item, position) => nativeUpdateAsset(item.id, { order: position + 1 }));
+    reloadAndRefreshSelections();
+    emotionSelect.value = String(items.findIndex((item) => item.id === selectedId) + 1);
+    saveGeneratorState({ emotion: emotionSelect.value });
+    pendingAssetScrollId = id;
+    renderAssetManager();
+    requestRender();
+    window.dispatchEvent(new CustomEvent("assetschange"));
+  } catch (error) { showAppNotice(error.message || "排序失败，请重试"); }
 }
 
 async function deleteAssetWithConfirm(kind, id, label) {
@@ -1366,10 +1670,13 @@ async function deleteAssetWithConfirm(kind, id, label) {
     danger: true,
   });
   if (!ok) return;
-  nativeDeleteAsset(kind, id);
+  try { nativeDeleteAsset(kind, id); }
+  catch (error) { showAppNotice(error.message || "删除失败，请重试"); return; }
   reloadAndRefreshSelections();
   renderAssetManager();
   await render();
+  window.dispatchEvent(new CustomEvent("assetschange"));
+  showAppNotice(`已删除「${label}」`);
 }
 
 function reloadAndRefreshSelections(preferredCharacter = characterSelect.value, preferredBackground = backgroundSelect.value) {
@@ -1390,7 +1697,8 @@ function editorCanvasSize(state) {
 function editorMinScale(state) {
   if (!state || !state.image) return 1;
   const size = editorCanvasSize(state);
-  return Math.max(size.width / state.image.naturalWidth, size.height / state.image.naturalHeight);
+  const fit = state.kind === "background" ? Math.max : Math.min;
+  return fit(size.width / state.image.naturalWidth, size.height / state.image.naturalHeight) * (state.kind === "background" ? 1 : 0.5);
 }
 
 function setEditorCanvasSize(editor, state) {
@@ -1417,6 +1725,13 @@ function clampEditorTransform(state) {
   state.scale = Math.max(minScale, Number(state.scale) || minScale);
   const scaledWidth = state.image.naturalWidth * state.scale;
   const scaledHeight = state.image.naturalHeight * state.scale;
+  if (state.kind !== "background") {
+    const visibleWidth = Math.min(scaledWidth, size.width * 0.15);
+    const visibleHeight = Math.min(scaledHeight, size.height * 0.15);
+    state.x = Math.max(visibleWidth - scaledWidth, Math.min(size.width - visibleWidth, Number(state.x) || 0));
+    state.y = Math.max(visibleHeight - scaledHeight, Math.min(size.height - visibleHeight, Number(state.y) || 0));
+    return;
+  }
   state.x = scaledWidth <= size.width
     ? (size.width - scaledWidth) / 2
     : Math.min(0, Math.max(size.width - scaledWidth, state.x));
@@ -1454,6 +1769,7 @@ function openImageEditor(kind, ownerId, dataUrl) {
     lastY: 0,
   };
   editor.state = state;
+  editor.querySelector("[data-editor-save]").disabled = false;
   setEditorCanvasSize(editor, state);
   editor.querySelector("[data-editor-title]").textContent = kind === "background" ? "裁切背景" : "定位角色/表情";
   editor.querySelector("[data-editor-name]").value = kind === "background"
@@ -1463,15 +1779,16 @@ function openImageEditor(kind, ownerId, dataUrl) {
       : `表情 ${assetState.emotions.filter((item) => item.ownerId === ownerId).length + 1}`;
   openOverlay(editor, "crop");
   loadStandaloneImage(dataUrl).then((img) => {
+    if (editor.state !== state || !editor.classList.contains("open")) return;
     state.image = img;
-    state.scale = editorMinScale(state);
+    state.scale = editorMinScale(state) * (kind === "background" ? 1 : 2);
     const size = editorCanvasSize(state);
     state.x = (size.width - img.naturalWidth * state.scale) / 2;
     state.y = (size.height - img.naturalHeight * state.scale) / 2;
     clampEditorTransform(state);
     syncEditorZoomRange(editor, state);
     drawEditor();
-  });
+  }).catch(() => { if (editor.state === state) { showAppNotice("无法读取这张图片，请重新选择"); closeOverlay(editor); } });
 }
 
 function ensureCropEditor() {
@@ -1482,54 +1799,89 @@ function ensureCropEditor() {
   editor.innerHTML = `
     <div class="asset-header">
       <strong data-editor-title>裁切</strong>
-      <button type="button" data-editor-close>取消</button>
+      <div class="header-actions"><button type="button" data-editor-close>取消</button><button type="button" data-editor-save class="primary">保存</button></div>
     </div>
     <div class="editor-stage"><canvas width="1000" height="326"></canvas></div>
     <div class="editor-controls">
-      <div class="editor-hint">拖动图片调整位置；棋盘格代表透明或空白区域。</div>
-      <input data-editor-name aria-label="素材名称" />
+      <input data-editor-name aria-label="素材名称" maxlength="80" />
       <label>缩放 <input data-zoom type="range" min="20" max="300" value="100" /></label>
-      <div class="editor-actions">
-        <button type="button" data-editor-save class="primary">保存</button>
-      </div>
+      <button type="button" data-editor-reset aria-label="重置图片位置和缩放"><i data-lucide="rotate-ccw"></i>重置</button>
     </div>
   `;
   document.body.appendChild(editor);
   const canvasElement = editor.querySelector("canvas");
+  const pointers = new Map();
+  let pinch = null;
+  function point(event) {
+    const rect = canvasElement.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) * canvasElement.width / rect.width, y: (event.clientY - rect.top) * canvasElement.height / rect.height };
+  }
+  function beginPinch() {
+    if (pointers.size !== 2 || !editor.state?.image) { pinch = null; return; }
+    const [a, b] = Array.from(pointers.values());
+    pinch = { distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
+      scale: editor.state.scale, imageX: editor.state.x, imageY: editor.state.y };
+  }
   canvasElement.addEventListener("pointerdown", (event) => {
     const state = editor.state;
+    if (!state?.image) return;
+    if (!pointers.size) pinch = null;
+    pointers.set(event.pointerId, point(event));
     state.dragging = true;
-    state.lastX = event.clientX;
-    state.lastY = event.clientY;
+    beginPinch();
     canvasElement.setPointerCapture(event.pointerId);
   });
   canvasElement.addEventListener("pointermove", (event) => {
     const state = editor.state;
-    if (!state || !state.dragging) return;
-    const rect = canvasElement.getBoundingClientRect();
-    const sx = canvasElement.width / rect.width;
-    const sy = canvasElement.height / rect.height;
-    state.x += (event.clientX - state.lastX) * sx;
-    state.y += (event.clientY - state.lastY) * sy;
-    state.lastX = event.clientX;
-    state.lastY = event.clientY;
+    if (!state || !pointers.has(event.pointerId)) return;
+    const previous = pointers.get(event.pointerId);
+    const next = point(event);
+    pointers.set(event.pointerId, next);
+    if (pinch && pointers.size === 2) {
+      const [a, b] = Array.from(pointers.values());
+      const minimum = editorMinScale(state);
+      state.scale = Math.max(minimum, Math.min(Math.max(3, minimum * 6), pinch.scale * Math.hypot(a.x - b.x, a.y - b.y) / pinch.distance));
+      state.x = (a.x + b.x) / 2 - (pinch.x - pinch.imageX) * state.scale / pinch.scale;
+      state.y = (a.y + b.y) / 2 - (pinch.y - pinch.imageY) * state.scale / pinch.scale;
+    } else {
+      state.x += next.x - previous.x;
+      state.y += next.y - previous.y;
+    }
     clampEditorTransform(state);
     syncEditorZoomRange(editor, state);
     drawEditor();
   });
-  canvasElement.addEventListener("pointerup", () => {
-    if (editor.state) editor.state.dragging = false;
-  });
+  function endPointer(event) { pointers.delete(event.pointerId); beginPinch(); if (editor.state) editor.state.dragging = pointers.size > 0; }
+  canvasElement.addEventListener("pointerup", endPointer);
+  canvasElement.addEventListener("pointercancel", endPointer);
+  canvasElement.addEventListener("lostpointercapture", endPointer);
   editor.querySelector("[data-zoom]").addEventListener("input", (event) => {
     const state = editor.state;
     if (!state) return;
-    state.scale = Number(event.target.value) / 100;
+    if (!state.image) return;
+    const next = Number(event.target.value) / 100;
+    const size = editorCanvasSize(state);
+    state.x = size.width / 2 - (size.width / 2 - state.x) * next / state.scale;
+    state.y = size.height / 2 - (size.height / 2 - state.y) * next / state.scale;
+    state.scale = next;
+    clampEditorTransform(state);
+    syncEditorZoomRange(editor, state);
+    drawEditor();
+  });
+  editor.querySelector("[data-editor-reset]").addEventListener("click", () => {
+    const state = editor.state;
+    if (!state?.image) return;
+    state.scale = editorMinScale(state) * (state.kind === "background" ? 1 : 2);
+    const size = editorCanvasSize(state);
+    state.x = (size.width - state.image.naturalWidth * state.scale) / 2;
+    state.y = (size.height - state.image.naturalHeight * state.scale) / 2;
     clampEditorTransform(state);
     syncEditorZoomRange(editor, state);
     drawEditor();
   });
   editor.querySelector("[data-editor-close]").addEventListener("click", () => closeOverlay(editor));
   editor.querySelector("[data-editor-save]").addEventListener("click", saveEditorAsset);
+  if (window.lucide) window.lucide.createIcons();
   return editor;
 }
 
@@ -1559,18 +1911,23 @@ function drawEditor() {
 async function saveEditorAsset() {
   const editor = ensureCropEditor();
   const state = editor.state;
+  const saveButton = editor.querySelector("[data-editor-save]");
+  if (saveButton.disabled) return;
   if (!state || !state.image) {
     notifyAndroid("图片还没有加载完成", true);
     return;
   }
   clampEditorTransform(state);
   drawEditor();
+  saveButton.disabled = true;
   const name = editor.querySelector("[data-editor-name]").value.trim() || "自定义素材";
   const output = document.createElement("canvas");
   if (state.kind === "background") {
     output.width = CANVAS_WIDTH;
     output.height = CANVAS_HEIGHT;
-    output.getContext("2d").drawImage(editor.querySelector("canvas"), 0, 0, output.width, output.height);
+    const out = output.getContext("2d");
+    out.scale(CANVAS_WIDTH / 1000, CANVAS_HEIGHT / 326);
+    out.drawImage(state.image, state.x, state.y, state.image.naturalWidth * state.scale, state.image.naturalHeight * state.scale);
   } else {
     output.width = 720;
     output.height = 700;
@@ -1584,7 +1941,9 @@ async function saveEditorAsset() {
       state.image.naturalHeight * state.scale
     );
   }
-  const dataUrl = output.toDataURL("image/png");
+  let dataUrl;
+  try { dataUrl = await canvasToDataUrl(output); }
+  catch (_) { saveButton.disabled = false; showAppNotice("无法生成素材图片，请重新选择"); return; }
   const id = uid(state.kind);
   const metadata = {
     id,
@@ -1610,14 +1969,23 @@ async function saveEditorAsset() {
     const message = error && error.message ? error.message : "素材保存失败";
     showAppNotice(message);
     notifyAndroid(message, true);
+    saveButton.disabled = false;
     return;
   }
   pendingAssetScrollId = id;
   pendingAssetHighlightId = id;
   closeOverlay(editor);
   reloadAndRefreshSelections(state.kind === "character" ? id : characterSelect.value, state.kind === "background" ? id : backgroundSelect.value);
+  if (state.kind === "emotion") {
+    characterSelect.value = state.ownerId;
+    updateEmotionOptions();
+    const index = currentCharacter().emotionItems.findIndex((item) => item.id === id);
+    emotionSelect.value = String(Math.max(0, index) + 1);
+  }
+  saveGeneratorState();
   renderAssetManager();
   await render();
+  saveButton.disabled = false;
   showAppNotice("素材已保存并已选中");
   notifyAndroid("素材已保存并已选中", false);
 }
@@ -1648,9 +2016,9 @@ function ensureNameEditor() {
       <div class="name-canvas-wrap"><canvas width="2560" height="834"></canvas></div>
     </div>
     <div class="name-tools">
-      <input data-name-text aria-label="字块文字" placeholder="文字" />
-      <input data-name-color type="color" value="#ffffff" aria-label="字块颜色" />
-      <input data-name-size type="number" value="150" min="20" max="260" aria-label="字块字号" />
+      <label>文字<input data-name-text aria-label="字块文字" placeholder="文字" maxlength="80" /></label>
+      <label>颜色<input data-name-color type="color" value="#ffffff" aria-label="字块颜色" /></label>
+      <label>字号<input data-name-size type="number" value="150" min="32" max="240" aria-label="字块字号" /></label>
       <button type="button" data-name-add>添加字块</button>
       <button type="button" data-name-delete>删除字块</button>
       <button type="button" data-name-reset>重置布局</button>
@@ -1659,6 +2027,7 @@ function ensureNameEditor() {
   document.body.appendChild(editor);
   editor.querySelector("[data-name-close]").addEventListener("click", () => closeOverlay(editor));
   editor.querySelector("[data-name-add]").addEventListener("click", () => {
+    if (editor.blocks.length >= 32) { showAppNotice("最多添加 32 个字块"); return; }
     editor.blocks.push({ id: uid("name"), text: "名字", x: 759, y: 73, size: 150, color: "#ffffff" });
     editor.selectedId = editor.blocks[editor.blocks.length - 1].id;
     renderNameBlocks();
@@ -1674,7 +2043,8 @@ function ensureNameEditor() {
     renderNameBlocks();
   });
   editor.querySelector("[data-name-save]").addEventListener("click", async () => {
-    nativeUpdateAsset(editor.characterId, { nameBlocks: editor.blocks });
+    try { nativeUpdateAsset(editor.characterId, { nameBlocks: editor.blocks }); }
+    catch (error) { showAppNotice(error.message || "保存失败，请重试"); return; }
     pendingAssetScrollId = editor.characterId;
     closeOverlay(editor);
     reloadAndRefreshSelections(editor.characterId);
@@ -1690,21 +2060,29 @@ function ensureNameEditor() {
 function renderNameBlocks() {
   const editor = ensureNameEditor();
   const wrap = editor.querySelector(".name-canvas-wrap");
-  wrap.querySelectorAll(".name-block").forEach((item) => item.remove());
+  const validIds = new Set(editor.blocks.map((item) => item.id));
+  wrap.querySelectorAll(".name-block").forEach((item) => { if (!validIds.has(item.dataset.id)) item.remove(); });
   const selected = editor.blocks.find((item) => item.id === editor.selectedId) || editor.blocks[0];
   editor.selectedId = selected && selected.id;
   for (const block of editor.blocks) {
-    const el = document.createElement("div");
-    el.className = "name-block";
+    let el = Array.from(wrap.querySelectorAll(".name-block")).find((item) => item.dataset.id === block.id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "name-block";
+      el.dataset.id = block.id;
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+      el.addEventListener("pointerdown", startNameDrag);
+      el.addEventListener("click", () => selectNameBlock(block.id));
+      wrap.appendChild(el);
+    }
     el.textContent = block.text;
     el.style.left = `${(block.x / CANVAS_WIDTH) * 100}%`;
     el.style.top = `${(block.y / CANVAS_HEIGHT) * 100}%`;
     el.style.fontSize = `${Math.max(12, (block.size / CANVAS_WIDTH) * wrap.clientWidth)}px`;
     el.style.color = block.color || "#ffffff";
-    el.dataset.id = block.id;
-    el.addEventListener("pointerdown", startNameDrag);
-    el.addEventListener("click", () => selectNameBlock(block.id));
-    wrap.appendChild(el);
+    el.setAttribute("aria-label", `姓名字块：${block.text || "空白"}`);
+    el.setAttribute("aria-pressed", String(block.id === editor.selectedId));
   }
   if (selected) selectNameBlock(selected.id);
 }
@@ -1723,88 +2101,126 @@ function updateSelectedNameBlock() {
   const editor = ensureNameEditor();
   const block = editor.blocks.find((item) => item.id === editor.selectedId);
   if (!block) return;
-  block.text = editor.querySelector("[data-name-text]").value;
+  block.text = editor.querySelector("[data-name-text]").value.slice(0, 80);
   block.color = editor.querySelector("[data-name-color]").value;
-  block.size = Number(editor.querySelector("[data-name-size]").value) || 150;
+  block.size = Math.min(240, Math.max(32, Number(editor.querySelector("[data-name-size]").value) || 150));
   renderNameBlocks();
 }
 
 function startNameDrag(event) {
+  event.preventDefault();
   const editor = ensureNameEditor();
   const id = event.currentTarget.dataset.id;
   selectNameBlock(id);
   const block = editor.blocks.find((item) => item.id === id);
   const wrap = editor.querySelector(".name-canvas-wrap");
+  const startX = Number(block.x) || 0;
+  const startY = Number(block.y) || 0;
+  const downX = event.clientX;
+  const downY = event.clientY;
+  const pointerId = event.pointerId;
+  const draggedElement = event.currentTarget;
   const move = (moveEvent) => {
+    if (moveEvent.pointerId !== pointerId) return;
     const rect = wrap.getBoundingClientRect();
-    block.x = Math.max(0, Math.min(CANVAS_WIDTH, ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH));
-    block.y = Math.max(0, Math.min(CANVAS_HEIGHT, ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT));
+    const box = draggedElement;
+    const width = box ? box.getBoundingClientRect().width / rect.width * CANVAS_WIDTH : 32;
+    const height = box ? box.getBoundingClientRect().height / rect.height * CANVAS_HEIGHT : 32;
+    block.x = Math.max(0, Math.min(CANVAS_WIDTH - width, startX + ((moveEvent.clientX - downX) / rect.width) * CANVAS_WIDTH));
+    block.y = Math.max(0, Math.min(CANVAS_HEIGHT - height, startY + ((moveEvent.clientY - downY) / rect.height) * CANVAS_HEIGHT));
     renderNameBlocks();
   };
   const up = () => {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", up);
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
 }
 
 async function shareImage() {
+  if (shareBusy) { showAppNotice("上一张还在处理"); return; }
+  shareBusy = true;
   try {
-    lineText.blur();
-    await render();
+    const dataUrl = await window.exportImageDataUrl(false);
 
     if (window.AndroidBridge && typeof window.AndroidBridge.shareImage === "function") {
-      const dataUrl = androidExportDataUrl(SHARE_EXPORT_WIDTH);
       window.AndroidBridge.shareImage(dataUrl);
       return;
     }
+    const blob = dataUrlToBlob(dataUrl);
+    const file = new File([blob], `魔裁文本框-${Date.now()}.png`, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "魔裁文本框" });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
-    notifyAndroid(`分享失败：${error.message}`, true);
-    return;
+    if (error.name !== "AbortError") showAppNotice(`分享失败：${error.message}`);
+  } finally {
+    shareBusy = false;
   }
-
-  const blob = await canvasToBlob();
-  const file = new File([blob], `魔裁文本框-${Date.now()}.png`, { type: "image/png" });
-
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ files: [file], title: "魔裁文本框" });
-    return;
-  }
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = file.name;
-  link.click();
-  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    window.open(url, "_blank", "noopener");
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function shareToQQ() {
+  if (!window.AndroidBridge || typeof window.AndroidBridge.shareToQQ !== "function") return shareImage();
+  if (shareBusy) { showAppNotice("上一张还在处理"); return; }
+  shareBusy = true;
+  const waitForImeResult = document.documentElement.classList.contains("ime-mode");
+  if (waitForImeResult) window.setImeSendState?.("busy", "正在生成图片…");
+  let handedOff = false;
   try {
-    lineText.blur();
-    await render();
-
-    if (window.AndroidBridge && typeof window.AndroidBridge.shareToQQ === "function") {
-      const dataUrl = androidExportDataUrl(getQqExportMaxWidth());
-      window.AndroidBridge.shareToQQ(dataUrl);
-      return;
-    }
+    const dataUrl = await window.exportImageDataUrl(true);
+    window.AndroidBridge.shareToQQ(dataUrl);
+    handedOff = waitForImeResult;
   } catch (error) {
-    notifyAndroid(`发到 QQ 失败：${error.message}`, true);
-    return;
+    shareBusy = false;
+    if (waitForImeResult) window.setImeSendState?.("error", `图片生成失败：${error.message}`);
+    showAppNotice(`发到 QQ 失败：${error.message}`);
+  } finally {
+    if (!handedOff) shareBusy = false;
   }
-
-  await shareImage();
 }
 
+window.sendCurrentImageToQQ = shareToQQ;
+
+window.setImeSendState = function setImeSendState(state, message) {
+  shareBusy = state === "busy";
+  window.receiveImeSendState?.(state, message || "");
+};
+
 window.exportImageDataUrl = async function exportImageDataUrl(forQQ) {
-  await render();
+  // current() notifies the state subscriber only when the persisted state changed.
+  // Calling applyGeneratorState directly forces a full control refresh on every send.
+  window.MahouState.current();
+  finishInput();
+  if (pendingRenderFrame) { cancelAnimationFrame(pendingRenderFrame); pendingRenderFrame = 0; }
+  const exportCanvas = document.createElement("canvas");
   const width = forQQ ? getQqExportMaxWidth() : SHARE_EXPORT_WIDTH;
-  return androidExportDataUrl(width);
+  let complete = false;
+  for (let attempt = 0; attempt < 3 && !complete; attempt++) {
+    complete = await render({ forceDialogText: true, targetCanvas: exportCanvas, targetWidth: width });
+  }
+  if (!complete) throw new Error("素材未能生成，请重新选择后重试");
+  // Keep QQ's latency-sensitive send path on the original direct encoding path.
+  // Async Blob + FileReader adds a callback/readback round trip before native send.
+  const dataUrl = forQQ ? exportCanvas.toDataURL("image/png") : await canvasToDataUrl(exportCanvas);
+  if (lineText.classList.contains("inline-line-text") && document.activeElement === lineText) requestRender();
+  return dataUrl;
+};
+
+window.receiveAssetsChanged = function receiveAssetsChanged() {
+  reloadAssets();
+  applyGeneratorState(window.MahouState.current());
+  if (document.querySelector(".asset-modal.open")) renderAssetManager();
+  window.dispatchEvent(new Event("assetschange"));
 };
 
 window.receivePickedBackground = async function receivePickedBackground(dataUrl) {
@@ -1863,13 +2279,14 @@ const ACCESSIBLE_ACTIONS = [
 ];
 
 let accessibilityReportPending = false;
+let accessibleSequence = 0;
 function reportAccessibleActions() {
   accessibilityReportPending = false;
   if (!window.AndroidBridge || typeof window.AndroidBridge.reportAccessibleActions !== "function") return;
   const actions = [];
-  for (const [id, action] of ACCESSIBLE_ACTIONS) {
-    const element = document.getElementById(id);
-    if (!element || element.hidden) continue;
+  const root = activeOverlay() || document.querySelector(".workspace") || document.body;
+  for (const element of root.querySelectorAll('button,[role="button"]')) {
+    if (element.hidden || element.closest("[inert]")) continue;
     const style = getComputedStyle(element);
     const rect = element.getBoundingClientRect();
     if (style.display === "none" || style.visibility === "hidden" || rect.width <= 0 || rect.height <= 0) continue;
@@ -1878,8 +2295,9 @@ function reportAccessibleActions() {
     const right = Math.min(window.innerWidth, rect.right);
     const bottom = Math.min(window.innerHeight, rect.bottom);
     if (right <= left || bottom <= top) continue;
+    if (!element.id) element.id = `mahou-action-${++accessibleSequence}`;
     actions.push({
-      action,
+      action: `web:${element.id}`,
       label: element.getAttribute("aria-label") || element.textContent.trim(),
       left,
       top,
@@ -1915,6 +2333,7 @@ if (!window.AndroidBridge && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
+addEventListener("resize", requestRender, { passive: true });
 setupControls();
 render();
 scheduleAccessibilityReport();

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN" class="editor-root" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none';script-src 'self';style-src 'self' 'unsafe-inline';img-src 'self' data: blob:;font-src 'self';connect-src 'self';child-src 'self';worker-src 'self';object-src 'none';base-uri 'none';form-action 'none'" />
+    <title>编辑台词</title>
+    <script src="theme-bootstrap.js"></script><link rel="stylesheet" href="mobile.css" /><link rel="stylesheet" href="ime.css" />
+  </head>
+  <body class="editor-sheet" style="background:transparent">
+    <button id="editorScrim" type="button" class="editor-scrim" aria-label="返回聊天"></button>
+    <main class="editor-card" aria-label="图片台词编辑">
+      <header class="app-header"><button id="leaveImeEditor" type="button" class="icon-button" title="返回" aria-label="返回聊天"><i data-lucide="arrow-left"></i></button><strong>编辑台词</strong><div class="editor-actions"><button id="sendImeEditor" type="button" class="primary"><i data-lucide="send"></i>发到 QQ</button><button id="finishImeEditor" type="button"><i data-lucide="check"></i>完成</button></div></header>
+      <p class="editor-note">“发到 QQ”会返回聊天并准备图片；请点 QQ 输入框右侧“+”→“相册”选择图片发送。“完成”只返回聊天。使用手机原键盘时，系统可能要求选回魔裁；内置键盘可留在当前输入法流程。</p>
+      <div class="workspace-content">
+        <section class="preview-wrap composer inline-composer" aria-label="图片与台词编辑">
+          <div class="preview-stage"><canvas id="preview" width="2560" height="834"></canvas><textarea id="lineText" class="inline-line-text" readonly rows="3" maxlength="180" aria-label="图片内台词输入" placeholder="台词…" spellcheck="false">今天的群聊，开始整活。</textarea></div>
+          <div class="composer-tools"><button id="clearTextButton" type="button" class="icon-button" title="清空台词" aria-label="清空台词"><i data-lucide="eraser"></i></button><output id="textCounter" aria-label="已输入字数">0 / 180</output><button data-keyboard-done type="button" class="icon-button" title="收起键盘" aria-label="收起键盘"><i data-lucide="keyboard"></i></button></div>
+        </section>
+      </div>
+      <div id="builtinKeyboard" class="touch-keyboard" role="group" aria-label="魔裁拼音键盘" hidden></div>
+      <div hidden aria-hidden="true"><select id="characterSelect"></select><select id="emotionSelect"></select><select id="backgroundSelect"></select><output id="characterLabel"></output><output id="emotionLabel"></output><output id="backgroundLabel"></output><button id="characterPrev" type="button"></button><button id="characterNext" type="button"></button><button id="emotionPrev" type="button"></button><button id="emotionNext" type="button"></button><button id="backgroundPrev" type="button"></button><button id="backgroundNext" type="button"></button></div>
+    </main>
+    <script src="icons/lucide.min.js"></script><script src="generator-state.js"></script><script src="mobile.js"></script><script src="workspace.js"></script><script src="touch-keyboard.js"></script><script src="ime-editor.js"></script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 param(
     [ValidateSet("Debug", "Release", "All")]
-    [string]$Configuration = "All"
+    [string]$Configuration = "All",
+    [switch]$Quick
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,9 @@ $Sdk = if ($env:ANDROID_HOME) {
     "$env:LOCALAPPDATA\Android\Sdk"
 }
 $Gradle = Join-Path $AndroidRoot "gradlew.bat"
+$VersionName = "0.7.22"
+$VersionCode = 53
+$VersionFile = "mahou-textbox-" + ($VersionName -replace '\.','')
 $ExpectedCertificate = (Get-Content -LiteralPath (Join-Path $AndroidRoot "release-cert.sha256") -Raw).Trim().ToLowerInvariant()
 
 function Invoke-Checked {
@@ -65,7 +69,14 @@ Enable-SystemProxyForGradle
 $tasks = switch ($Configuration) {
     "Debug" { @("clean", ":app:assembleDebug", ":app:lintDebug", ":app:testDebugUnitTest") }
     "Release" { @("clean", ":app:assembleRelease", ":app:lintRelease", ":app:testReleaseUnitTest") }
-    default { @("clean", ":app:assembleDebug", ":app:assembleRelease", ":app:lint", ":app:test") }
+    default { @("clean", ":app:assembleDebug", ":app:assembleRelease", ":app:lintDebug", ":app:lintRelease", ":app:testDebugUnitTest", ":app:testReleaseUnitTest") }
+}
+if ($Quick) {
+    $tasks = switch ($Configuration) {
+        "Debug" { @(":app:assembleDebug") }
+        "Release" { @(":app:assembleRelease") }
+        default { @(":app:assembleDebug", ":app:assembleRelease") }
+    }
 }
 Invoke-Checked $Gradle (@("--no-daemon", "-p", $AndroidRoot) + $tasks)
 
@@ -76,14 +87,14 @@ if ($Configuration -in @("Debug", "All")) {
     $artifacts += @{
         Type = "Debug"
         Source = Join-Path $AndroidRoot "app\build\outputs\apk\debug\app-debug.apk"
-        Target = Join-Path $AndroidRoot "mahou-textbox-0.4.0-debug.apk"
+        Target = Join-Path $AndroidRoot "$VersionFile-debug.apk"
     }
 }
 if ($Configuration -in @("Release", "All")) {
     $artifacts += @{
         Type = "Release"
         Source = Join-Path $AndroidRoot "app\build\outputs\apk\release\app-release.apk"
-        Target = Join-Path $AndroidRoot "mahou-textbox-0.4.0-release.apk"
+        Target = Join-Path $AndroidRoot "$VersionFile.apk"
     }
 }
 
@@ -93,7 +104,7 @@ foreach ($artifact in $artifacts) {
     $verify = & $ApkSigner verify --verbose --print-certs $artifact.Target 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -ne 0) { throw "$($artifact.Type) signature verification failed: $verify" }
     $badging = & $Aapt dump badging $artifact.Target | Select-Object -First 1
-    if ($badging -notmatch "versionCode='23'" -or $badging -notmatch "versionName='0.4.0'") {
+    if ($badging -notmatch "versionCode='$VersionCode'" -or $badging -notmatch "versionName='$([regex]::Escape($VersionName))'") {
         throw "$($artifact.Type) APK has the wrong version: $badging"
     }
     if ($artifact.Type -eq "Release") {
@@ -110,6 +121,7 @@ foreach ($artifact in $artifacts) {
     }
     $hash = (Get-FileHash -LiteralPath $artifact.Target -Algorithm SHA256).Hash.ToLowerInvariant()
     $checksumLines += "$hash  $([IO.Path]::GetFileName($artifact.Target))"
+    "$hash  $([IO.Path]::GetFileName($artifact.Target))" | Set-Content -LiteralPath "$($artifact.Target).sha256" -Encoding ASCII
     Write-Host "$($artifact.Type) APK verified: $($artifact.Target)"
 }
 

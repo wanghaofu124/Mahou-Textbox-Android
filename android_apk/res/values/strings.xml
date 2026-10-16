@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="ime_name">魔裁图片输入法</string>
     <string name="app_name">魔裁文本框</string>
+    <string name="qq_send_service_name">魔裁 QQ 辅助发送</string>
+    <string name="qq_send_service_description">仅在你点魔裁的发送按钮后，读取当前 QQ/TIM 界面以确认会话、打开本次图片相册并点发送。不会选择联系人或群，不在后台自动发消息，不上传界面内容。识别不明确会停止。可随时在这里关闭。</string>
     <string name="popup_channel_name">悬浮窗运行状态</string>
     <string name="popup_notification_title">魔裁文本框正在运行</string>
     <string name="popup_notification_text">点按返回生成器，或使用操作按钮关闭悬浮窗</string>

@@ -54,6 +54,7 @@
 .key-candidates { display: flex; gap: 4px; flex: 0 0 46px; min-height: 46px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
 .key-candidates button { flex-shrink: 0; min-width: 48px; min-height: 44px; height: 44px; padding: 3px 10px; border: 0; background: transparent; font-size: 18px; white-space: nowrap; }
 .key-candidates:has(.touch-key) { justify-content: center; }
+.key-candidates button.voice-active { color: var(--accent); }
 .key-rows { display: grid; grid-template-rows: repeat(4,minmax(50px,1fr)); gap: 5px; width: 100%; max-width: 100%; min-width: 0; min-height: 0; }
 .key-row { display: flex; gap: 5px; width: 100%; max-width: 100%; min-width: 0; }
 .key-row.row-1 { padding-inline: 14px; }

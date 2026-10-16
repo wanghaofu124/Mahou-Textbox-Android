@@ -192,7 +192,12 @@
         raw.addEventListener("click", () => this.choose(null)); fragment.appendChild(raw);
       } else {
         fragment.append(this.button("向左移动光标", "left", "chevron-left"), this.button("全选", "all", "text-select"), this.button("向右移动光标", "right", "chevron-right"));
-        if (this.options.voice) fragment.append(this.button("语音输入", "voice", "mic"));
+        if (this.options.voice) fragment.append(this.button(
+          this.voiceListening ? "结束语音输入" : "语音输入",
+          "voice",
+          this.voiceListening ? "mic-off" : "mic",
+          this.voiceListening ? "voice-active" : ""
+        ));
       }
       this.candidateRow.replaceChildren(fragment); this.candidateRow.scrollLeft = 0;
       window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });

@@ -61,7 +61,7 @@
   }
 
   window.insertRecognizedText = insertText;
-  window.setImeVoicePreview = (text, listening) => keyboard?.setVoicePreview(text, listening);
+  window.setImeVoicePreview = (text, listening, preparing) => keyboard?.setVoicePreview(text, listening, preparing);
   window.initializeImeEditor = function initializeImeEditor() {
     if (initialized) return;
     initialized = true;
@@ -79,7 +79,7 @@
       commit: insertText,
       edit: editText,
       voice: () => {
-        keyboard.setVoicePreview("", true);
+        keyboard.setVoicePreview("正在准备本机语音包…", false, true);
         window.showAppNotice?.("正在准备语音输入…", 10000);
         window.AndroidBridge?.startVoiceInput?.();
       },

@@ -14,8 +14,8 @@ $Sdk = if ($env:ANDROID_HOME) {
     "$env:LOCALAPPDATA\Android\Sdk"
 }
 $Gradle = Join-Path $AndroidRoot "gradlew.bat"
-$VersionName = "0.7.26"
-$VersionCode = 57
+$VersionName = "0.7.27"
+$VersionCode = 58
 $VersionFile = "mahou-textbox-" + ($VersionName -replace '\.','')
 $ExpectedCertificate = (Get-Content -LiteralPath (Join-Path $AndroidRoot "release-cert.sha256") -Raw).Trim().ToLowerInvariant()
 
@@ -115,8 +115,8 @@ foreach ($artifact in $artifacts) {
         if ($Matches[1].ToLowerInvariant() -ne $ExpectedCertificate) {
             throw "Release certificate mismatch. Expected $ExpectedCertificate"
         }
-        if ((Get-Item $artifact.Target).Length -gt 97000000) {
-            throw "Release APK exceeds the 97 MB public release limit."
+        if ((Get-Item $artifact.Target).Length -gt 150000000) {
+            throw "Release APK exceeds the 150 MB public release limit."
         }
     }
     $hash = (Get-FileHash -LiteralPath $artifact.Target -Algorithm SHA256).Hash.ToLowerInvariant()

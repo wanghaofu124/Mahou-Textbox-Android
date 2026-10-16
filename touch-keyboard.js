@@ -7,6 +7,7 @@
       this.composition = "";
       this.voicePreview = "";
       this.voiceListening = false;
+      this.voicePreparing = false;
       this.candidates = [];
       this.sequence = 0;
       this.workerReady = false;
@@ -59,9 +60,10 @@
       this.candidates = [];
       this.renderCandidates();
     }
-    setVoicePreview(text, listening = false) {
+    setVoicePreview(text, listening = false, preparing = false) {
       this.voicePreview = String(text || "");
       this.voiceListening = Boolean(listening);
+      this.voicePreparing = Boolean(preparing);
       this.renderCandidates();
     }
     configure({ sensitive = false, numeric = false } = {}) {
@@ -179,7 +181,7 @@
       this.output.dataset.placeholder = this.voiceListening && !preview ? "正在听，请说出台词…" : "拼音或语音识别内容会显示在这里";
       this.compositionLabel.textContent = this.composition ? "拼音" : (this.voicePreview || this.voiceListening ? "语音" : "预输入");
       this.root.classList.toggle("composing", Boolean(this.composition));
-      this.root.classList.toggle("voice-preview", Boolean(this.voicePreview || this.voiceListening));
+      this.root.classList.toggle("voice-preview", Boolean(this.voicePreview || this.voiceListening || this.voicePreparing));
       this.root.querySelector('[data-action="cancel"]').hidden = !this.composition;
       const fragment = document.createDocumentFragment();
       if (this.composition) {
@@ -193,10 +195,10 @@
       } else {
         fragment.append(this.button("向左移动光标", "left", "chevron-left"), this.button("全选", "all", "text-select"), this.button("向右移动光标", "right", "chevron-right"));
         if (this.options.voice) fragment.append(this.button(
-          this.voiceListening ? "结束语音输入" : "语音输入",
+          this.voicePreparing ? "取消语音包准备" : this.voiceListening ? "结束语音输入" : "语音输入",
           "voice",
           this.voiceListening ? "mic-off" : "mic",
-          this.voiceListening ? "voice-active" : ""
+          this.voiceListening || this.voicePreparing ? "voice-active" : ""
         ));
       }
       this.candidateRow.replaceChildren(fragment); this.candidateRow.scrollLeft = 0;

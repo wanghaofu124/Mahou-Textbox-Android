@@ -1,12 +1,12 @@
 {
-  "apk": "mahou-textbox-0726.apk",
-  "apkBytes": 94494917,
-  "generatedAt": "2026-10-16T07:37:32.7364719Z",
+  "apk": "mahou-textbox-0727.apk",
+  "apkBytes": 135369914,
+  "generatedAt": "2026-10-16T08:31:55.1357867Z",
   "groups": {
     "androidResources": {
       "files": 88,
-      "uncompressedBytes": 202572,
-      "compressedBytes": 188840
+      "uncompressedBytes": 202980,
+      "compressedBytes": 189246
     },
     "builtInBackgrounds": {
       "files": 16,
@@ -20,8 +20,8 @@
     },
     "dex": {
       "files": 1,
-      "uncompressedBytes": 350240,
-      "compressedBytes": 161425
+      "uncompressedBytes": 533256,
+      "compressedBytes": 240626
     },
     "fonts": {
       "files": 1,
@@ -29,19 +29,19 @@
       "compressedBytes": 8019870
     },
     "other": {
-      "files": 9,
-      "uncompressedBytes": 41034,
-      "compressedBytes": 13713
+      "files": 20,
+      "uncompressedBytes": 40764378,
+      "compressedBytes": 40736940
     },
     "signingMetadata": {
-      "files": 26,
-      "uncompressedBytes": 52470,
-      "compressedBytes": 24887
+      "files": 28,
+      "uncompressedBytes": 89543,
+      "compressedBytes": 38230
     },
     "webRuntime": {
       "files": 25,
-      "uncompressedBytes": 3051211,
-      "compressedBytes": 932570
+      "uncompressedBytes": 3051689,
+      "compressedBytes": 932693
     }
   }
 }

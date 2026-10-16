@@ -726,6 +726,7 @@ window.setupImageDoubleTap = function setupImageDoubleTap(surface, action) {
 window.beginInlineTextEditing = function beginInlineTextEditing() {
   if (!lineText.classList.contains("inline-line-text")) return;
   const alreadyEditing = document.activeElement === lineText;
+  lineText.classList.add("inline-editing");
   lineText.readOnly = false;
   lineText.tabIndex = 0;
   lineText.focus();
@@ -763,8 +764,8 @@ function setupControls() {
   });
   if (lineText.classList.contains("inline-line-text")) {
     const refreshEditor = () => { requestAnimationFrame(fitInlineComposer); requestRender(); };
-    lineText.addEventListener("focus", refreshEditor);
-    lineText.addEventListener("blur", () => { lineText.readOnly = true; lineText.tabIndex = -1; refreshEditor(); });
+    lineText.addEventListener("focus", () => { lineText.classList.add("inline-editing"); refreshEditor(); });
+    lineText.addEventListener("blur", () => { lineText.classList.remove("inline-editing"); lineText.readOnly = true; lineText.tabIndex = -1; refreshEditor(); });
     if (window.ResizeObserver) new ResizeObserver(fitInlineComposer).observe(lineText.closest(".workspace-content"));
     else window.addEventListener("resize", fitInlineComposer);
     window.setupImageDoubleTap(canvas, window.beginInlineTextEditing);

@@ -20,8 +20,8 @@ android {
         applicationId "com.mahou.textbox"
         minSdk 23
         targetSdk 35
-        versionCode 57
-        versionName "0.7.26"
+        versionCode 58
+        versionName "0.7.27"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -136,6 +136,8 @@ dependencies {
     implementation "androidx.core:core:1.16.0"
     implementation "androidx.webkit:webkit:1.13.0"
     implementation "androidx.exifinterface:exifinterface:1.4.1"
+    implementation "net.java.dev.jna:jna:5.18.1@aar"
+    implementation "com.alphacephei:vosk-android:0.3.75@aar"
 
     testImplementation "junit:junit:4.13.2"
     androidTestImplementation "androidx.test.ext:junit:1.2.1"

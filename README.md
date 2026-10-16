@@ -4,7 +4,7 @@
 
 **当前源码：0.7.27（versionCode 58）**
 
-[下载当前已发布的 0.7.26 APK](https://github.com/wanghaofu124/Mahou-Textbox-Android/releases/tag/v0.7.26)
+[下载 0.7.27 预发布 APK](https://github.com/wanghaofu124/Mahou-Textbox-Android/releases/tag/v0.7.27)
 
 魔裁可以在输入法内选择角色、表情和背景，编辑台词并生成 PNG 表情图；仓库也保留了原有 Python 桌面脚本。
 

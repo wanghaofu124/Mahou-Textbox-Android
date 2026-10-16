@@ -1,8 +1,10 @@
 package com.mahou.textbox;
 
 import android.annotation.SuppressLint;
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Build;
 import android.util.Log;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 
 /** Translucent caption sheet. Typing stays in 魔裁 so returning never needs the IME picker. */
 public class ImeEditorActivity extends Activity {
+    private static final int REQUEST_RECORD_AUDIO = 8021;
     private static final int REQUEST_SYSTEM_SPEECH = 8022;
     private WebView webView;
     private boolean returning;
@@ -101,7 +104,24 @@ public class ImeEditorActivity extends Activity {
     }
 
     private void startVoiceInput() {
-        runOnUiThread(this::startSystemSpeechActivity);
+        runOnUiThread(() -> {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_RECORD_AUDIO);
+                return;
+            }
+            startSystemSpeechActivity();
+        });
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_RECORD_AUDIO) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startSystemSpeechActivity();
+        } else {
+            updateVoicePreview("", false);
+            showEditorNotice("需要麦克风权限才能使用语音输入", 3500);
+        }
     }
 
     private void startSystemSpeechActivity() {

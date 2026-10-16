@@ -2,9 +2,9 @@
 
 # 魔裁文本框：Android 图片输入法与对话框生成器
 
-**当前源码：0.7.24（versionCode 55）**
+**当前源码：0.7.25（versionCode 56）**
 
-[下载 0.7.24 预发布 APK](https://github.com/wanghaofu124/Mahou-Textbox-Android/releases/tag/v0.7.24)
+[下载 0.7.25 预发布 APK](https://github.com/wanghaofu124/Mahou-Textbox-Android/releases/tag/v0.7.25)
 
 魔裁可以在输入法内选择角色、表情和背景，编辑台词并生成 PNG 表情图；仓库也保留了原有 Python 桌面脚本。
 
@@ -26,7 +26,7 @@
 
 文字编辑键盘可在主界面设置中切换。使用手机原键盘时，编辑结束后系统可能要求手动选回魔裁；使用内置键盘可留在魔裁流程中。内置语音输入通过手机语音识别界面完成。首次使用悬浮窗模式还需允许“显示在其他应用上层”。
 
-当前图片导出格式为 PNG，GIF 导出尚未实现。0.7.24 为预发布版本，QQ/TIM 的实际发送流程和手机语音识别需在目标设备上确认。更新内容见 [发布说明](android_apk/RELEASE_NOTES-0.7.24.md)。
+当前图片导出格式为 PNG，GIF 导出尚未实现。0.7.25 为预发布版本，QQ/TIM 的实际发送流程和手机语音识别需在目标设备上确认。更新内容见 [发布说明](android_apk/RELEASE_NOTES-0.7.25.md)。
 
 
 <img width="1200" height="390" alt="5f10f4239bc8a82812e505fd0c4f5567" src="https://github.com/user-attachments/assets/6fb46a8d-4fc4-4d10-80a0-ed21fbb428bf" />

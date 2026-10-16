@@ -1,10 +1,8 @@
 package com.mahou.textbox;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Build;
 import android.util.Log;
@@ -12,21 +10,16 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
 import org.json.JSONObject;
 import java.util.ArrayList;
 
 /** Translucent caption sheet. Typing stays in 魔裁 so returning never needs the IME picker. */
 public class ImeEditorActivity extends Activity {
-    private static final int REQUEST_RECORD_AUDIO = 8021;
     private static final int REQUEST_SYSTEM_SPEECH = 8022;
     private WebView webView;
     private boolean returning;
     private boolean builtInKeyboard;
-    private SpeechRecognizer speechRecognizer;
-    private String voicePreviewText = "";
 
     @Override @SuppressLint("SetJavaScriptEnabled") protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -58,7 +51,6 @@ public class ImeEditorActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        destroySpeechRecognizer();
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidBridge");
             webView.destroy();
@@ -92,17 +84,6 @@ public class ImeEditorActivity extends Activity {
         InputMethodSupport.showPicker(this);
     }
 
-    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != REQUEST_RECORD_AUDIO) return;
-        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startSpeechRecognition();
-        } else {
-            updateVoicePreview("", false);
-            showEditorNotice("需要麦克风权限才能使用语音输入", 3500);
-        }
-    }
-
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_SYSTEM_SPEECH) return;
@@ -110,7 +91,7 @@ public class ImeEditorActivity extends Activity {
         String text = resultCode == RESULT_OK && matches != null && !matches.isEmpty() ? matches.get(0).trim() : "";
         updateVoicePreview("", false);
         if (text.isEmpty()) {
-            if (resultCode == RESULT_OK) showEditorNotice("没有听清，请再试一次", 3000);
+            showEditorNotice(resultCode == RESULT_CANCELED ? "语音输入已取消" : "没有听清，请再试一次", 3000);
             return;
         }
         if (webView != null) {
@@ -120,84 +101,10 @@ public class ImeEditorActivity extends Activity {
     }
 
     private void startVoiceInput() {
-        runOnUiThread(() -> {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_RECORD_AUDIO);
-                return;
-            }
-            startSpeechRecognition();
-        });
+        runOnUiThread(this::startSystemSpeechActivity);
     }
 
-    private void startSpeechRecognition() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            startSystemSpeechActivity();
-            return;
-        }
-        destroySpeechRecognizer();
-        try {
-            // Let the device's configured recognition service choose its best mode; forcing
-            // on-device recognition can sharply reduce Chinese recognition quality.
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-            speechRecognizer.setRecognitionListener(new RecognitionListener() {
-                @Override public void onReadyForSpeech(Bundle params) {
-                    voicePreviewText = "";
-                    updateVoicePreview("", true);
-                    showEditorNotice("正在听，请说出台词", 30000);
-                }
-                @Override public void onBeginningOfSpeech() {}
-                @Override public void onRmsChanged(float rmsdB) {}
-                @Override public void onBufferReceived(byte[] buffer) {}
-                @Override public void onEndOfSpeech() {
-                    updateVoicePreview(voicePreviewText.isEmpty() ? "正在识别…" : voicePreviewText, false);
-                    showEditorNotice("正在识别…", 10000);
-                }
-                @Override public void onError(int error) {
-                    updateVoicePreview("", false);
-                    destroySpeechRecognizer();
-                    if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER) {
-                        if (startSystemSpeechActivity()) return;
-                    }
-                    showEditorNotice(speechErrorMessage(error), 3500);
-                }
-                @Override public void onResults(Bundle results) {
-                    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                    String text = matches == null || matches.isEmpty() ? "" : matches.get(0).trim();
-                    updateVoicePreview("", false);
-                    destroySpeechRecognizer();
-                    if (text.isEmpty()) {
-                        showEditorNotice("没有听清，请再试一次", 3000);
-                        return;
-                    }
-                    if (webView != null) {
-                        webView.evaluateJavascript("window.insertRecognizedText&&window.insertRecognizedText(" + JSONObject.quote(text) + ");", null);
-                    }
-                    showEditorNotice("语音已输入", 1800);
-                }
-                @Override public void onPartialResults(Bundle partialResults) {
-                    ArrayList<String> partial = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                    voicePreviewText = partial == null || partial.isEmpty() ? "" : partial.get(0).trim();
-                    updateVoicePreview(voicePreviewText, true);
-                }
-                @Override public void onEvent(int eventType, Bundle params) {}
-            });
-            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN");
-            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-            intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "请说出台词");
-            speechRecognizer.startListening(intent);
-        } catch (RuntimeException error) {
-            destroySpeechRecognizer();
-            if (!startSystemSpeechActivity()) {
-                updateVoicePreview("", false);
-                showEditorNotice("无法启动语音识别，请检查手机语音服务", 3500);
-            }
-        }
-    }
-
-    private boolean startSystemSpeechActivity() {
+    private void startSystemSpeechActivity() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN");
@@ -207,20 +114,10 @@ public class ImeEditorActivity extends Activity {
             updateVoicePreview("", true);
             showEditorNotice("正在打开手机语音输入…", 10000);
             startActivityForResult(intent, REQUEST_SYSTEM_SPEECH);
-            return true;
         } catch (android.content.ActivityNotFoundException | SecurityException error) {
             updateVoicePreview("", false);
             showEditorNotice("这台手机没有可用的语音识别服务", 3500);
-            return false;
         }
-    }
-
-    private String speechErrorMessage(int error) {
-        if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) return "没有听清，请再试一次";
-        if (error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT) return "语音识别网络不可用";
-        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) return "没有麦克风权限，请在设置中允许";
-        if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) return "语音识别正忙，请稍后再试";
-        return "语音识别失败，请再试一次";
     }
 
     private void showEditorNotice(String message, int durationMs) {
@@ -236,12 +133,6 @@ public class ImeEditorActivity extends Activity {
             webView.evaluateJavascript("window.setImeVoicePreview&&window.setImeVoicePreview("
                     + JSONObject.quote(text == null ? "" : text) + "," + listening + ");", null);
         });
-    }
-
-    private void destroySpeechRecognizer() {
-        SpeechRecognizer recognizer = speechRecognizer;
-        speechRecognizer = null;
-        if (recognizer != null) recognizer.destroy();
     }
 
     private final class EditorBridge {

@@ -7,7 +7,7 @@ import org.junit.Test;
 public class VersionContractTest {
     @Test
     public void publicReleaseVersionIsPinned() {
-        assertEquals("0.7.23", BuildConfig.VERSION_NAME);
-        assertEquals(54, BuildConfig.VERSION_CODE);
+        assertEquals("0.7.24", BuildConfig.VERSION_NAME);
+        assertEquals(55, BuildConfig.VERSION_CODE);
     }
 }

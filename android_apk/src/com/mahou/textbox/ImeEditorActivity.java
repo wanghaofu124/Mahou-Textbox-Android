@@ -21,6 +21,7 @@ import java.util.ArrayList;
 /** Translucent caption sheet. Typing stays in 魔裁 so returning never needs the IME picker. */
 public class ImeEditorActivity extends Activity {
     private static final int REQUEST_RECORD_AUDIO = 8021;
+    private static final int REQUEST_SYSTEM_SPEECH = 8022;
     private WebView webView;
     private boolean returning;
     private boolean builtInKeyboard;
@@ -102,6 +103,22 @@ public class ImeEditorActivity extends Activity {
         }
     }
 
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_SYSTEM_SPEECH) return;
+        ArrayList<String> matches = data == null ? null : data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+        String text = resultCode == RESULT_OK && matches != null && !matches.isEmpty() ? matches.get(0).trim() : "";
+        updateVoicePreview("", false);
+        if (text.isEmpty()) {
+            if (resultCode == RESULT_OK) showEditorNotice("没有听清，请再试一次", 3000);
+            return;
+        }
+        if (webView != null) {
+            webView.evaluateJavascript("window.insertRecognizedText&&window.insertRecognizedText(" + JSONObject.quote(text) + ");", null);
+        }
+        showEditorNotice("语音已输入", 1800);
+    }
+
     private void startVoiceInput() {
         runOnUiThread(() -> {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -114,8 +131,7 @@ public class ImeEditorActivity extends Activity {
 
     private void startSpeechRecognition() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            updateVoicePreview("", false);
-            showEditorNotice("这台手机没有可用的语音识别服务", 3500);
+            startSystemSpeechActivity();
             return;
         }
         destroySpeechRecognizer();
@@ -139,6 +155,9 @@ public class ImeEditorActivity extends Activity {
                 @Override public void onError(int error) {
                     updateVoicePreview("", false);
                     destroySpeechRecognizer();
+                    if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER) {
+                        if (startSystemSpeechActivity()) return;
+                    }
                     showEditorNotice(speechErrorMessage(error), 3500);
                 }
                 @Override public void onResults(Bundle results) {
@@ -171,8 +190,28 @@ public class ImeEditorActivity extends Activity {
             speechRecognizer.startListening(intent);
         } catch (RuntimeException error) {
             destroySpeechRecognizer();
+            if (!startSystemSpeechActivity()) {
+                updateVoicePreview("", false);
+                showEditorNotice("无法启动语音识别，请检查手机语音服务", 3500);
+            }
+        }
+    }
+
+    private boolean startSystemSpeechActivity() {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN");
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "请说出台词");
+        try {
+            updateVoicePreview("", true);
+            showEditorNotice("正在打开手机语音输入…", 10000);
+            startActivityForResult(intent, REQUEST_SYSTEM_SPEECH);
+            return true;
+        } catch (android.content.ActivityNotFoundException | SecurityException error) {
             updateVoicePreview("", false);
-            showEditorNotice("无法启动语音识别，请检查手机语音服务", 3500);
+            showEditorNotice("这台手机没有可用的语音识别服务", 3500);
+            return false;
         }
     }
 

@@ -526,7 +526,8 @@ function applyGeneratorState(state, changedFields) {
   window.dispatchEvent(new CustomEvent("generatorchange", {
     detail: { ...state, changedFields: fullRefresh ? ["text", "character", "emotion", "background"] : [...changed] },
   }));
-  requestRender();
+  const textOnlyWhileEditing = changed.size === 1 && changed.has("text") && document.activeElement === lineText;
+  if (!textOnlyWhileEditing) requestRender();
 }
 
 window.receiveGeneratorState = (state) => window.MahouState.receive(state);
@@ -758,7 +759,7 @@ function setupControls() {
   backgroundNext.addEventListener("click", () => stepNumericSelect(backgroundSelect, 1));
   lineText.addEventListener("input", () => {
     saveGeneratorState({ text: lineText.value });
-    requestRender();
+    if (document.activeElement !== lineText) requestRender();
   });
   if (lineText.classList.contains("inline-line-text")) {
     const refreshEditor = () => { requestAnimationFrame(fitInlineComposer); requestRender(); };

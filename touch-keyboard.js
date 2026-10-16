@@ -9,6 +9,8 @@
       this.voiceListening = false;
       this.candidates = [];
       this.sequence = 0;
+      this.workerReady = false;
+      this.queryTimer = 0;
       this.chinese = true;
       this.symbols = false;
       this.upper = false;
@@ -27,17 +29,32 @@
       try {
         this.worker = new Worker("pinyin/engine.js");
         this.worker.onmessage = ({ data }) => {
+          if (data.id === 0) {
+            this.workerReady = true;
+            if (this.composition) this.query();
+            return;
+          }
           if (data.id !== this.sequence) return;
           clearTimeout(this.timeout);
           this.candidates = data.candidates;
           this.renderCandidates();
         };
-        this.worker.onerror = () => { clearTimeout(this.timeout); this.candidates = []; this.renderCandidates(); };
-      } catch (_) { this.worker = null; }
+        this.worker.onerror = () => {
+          this.workerReady = false;
+          clearTimeout(this.timeout);
+          clearTimeout(this.queryTimer);
+          this.candidates = [];
+          this.renderCandidates();
+        };
+        // A short warm-up response tells us when the bundled dictionary has loaded.
+        // Queries typed during startup are held until then instead of killing the worker.
+        this.worker.postMessage({ id: 0, text: "a" });
+      } catch (_) { this.worker = null; this.workerReady = false; }
     }
     clear() {
       ++this.sequence;
       clearTimeout(this.timeout);
+      clearTimeout(this.queryTimer);
       this.composition = "";
       this.candidates = [];
       this.renderCandidates();
@@ -59,13 +76,17 @@
       this.renderCandidates();
       const id = ++this.sequence;
       clearTimeout(this.timeout);
+      clearTimeout(this.queryTimer);
       if (!this.composition) return;
-      this.worker?.postMessage({ id, text: this.composition });
-      this.timeout = setTimeout(() => {
-        if (id !== this.sequence) return;
-        this.startWorker();
-        this.options.notice?.("这段拼音较长，请分词输入，或点拼音直接输入英文");
-      }, 1800);
+      if (!this.worker || !this.workerReady) return;
+      const text = this.composition;
+      this.queryTimer = setTimeout(() => {
+        if (id !== this.sequence || !this.workerReady) return;
+        this.worker.postMessage({ id, text });
+        this.timeout = setTimeout(() => {
+          if (id === this.sequence) this.options.notice?.("候选词还在加载，点拼音可直接输入");
+        }, 4000);
+      }, 35);
     }
     choose(candidate) {
       if (!this.composition) return;
@@ -80,6 +101,7 @@
         if (this.composition) { this.composition = this.composition.slice(0, -1); this.query(); }
         else this.options.edit("delete");
       } else if (key === "voice") {
+        this.flush();
         this.options.voice?.();
       } else if (key === "language") {
         this.flush(); this.chinese = !this.chinese; this.symbols = false; this.renderKeys(); this.renderCandidates();
@@ -113,7 +135,6 @@
       let timer, repeated = false;
       const stop = () => { clearTimeout(timer); clearInterval(timer); };
       button.addEventListener("pointerdown", event => {
-        event.preventDefault();
         repeated = false;
         if (action === "delete") {
           button.setPointerCapture(event.pointerId);
@@ -165,7 +186,6 @@
         for (const item of this.candidates) {
           const button = document.createElement("button"); button.type = "button";
           button.textContent = item.w; button.setAttribute("aria-label", `候选词 ${item.w}`);
-          button.addEventListener("pointerdown", e => e.preventDefault());
           button.addEventListener("click", () => this.choose(item)); fragment.appendChild(button);
         }
         const raw = document.createElement("button"); raw.type = "button"; raw.textContent = this.composition;

@@ -14,8 +14,8 @@ $Sdk = if ($env:ANDROID_HOME) {
     "$env:LOCALAPPDATA\Android\Sdk"
 }
 $Gradle = Join-Path $AndroidRoot "gradlew.bat"
-$VersionName = "0.7.22"
-$VersionCode = 53
+$VersionName = "0.7.23"
+$VersionCode = 54
 $VersionFile = "mahou-textbox-" + ($VersionName -replace '\.','')
 $ExpectedCertificate = (Get-Content -LiteralPath (Join-Path $AndroidRoot "release-cert.sha256") -Raw).Trim().ToLowerInvariant()
 

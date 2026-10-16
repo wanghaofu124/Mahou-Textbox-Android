@@ -44,20 +44,20 @@
 .ime-draft { position: absolute; left: 28.4375%; top: 42.565948%; width: 62.929688%; height: 53.357314%; padding: 1px 2px; background: rgba(0,0,0,.75); color: white; font-size: 16px; line-height: 1.25; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; border: 1px solid var(--accent); touch-action: pan-y; }
 .ime-caret { display: inline; border-left: 2px solid var(--accent); margin-left: -2px; }
 .ime-selection { background: #177a52; }
-.touch-keyboard { display: flex; flex-direction: column; width: 100%; max-width: 100%; min-width: 0; min-height: 0; gap: 3px; padding-bottom: 3px; }
-.key-composition { box-sizing: border-box; height: 38px; min-height: 38px; flex: 0 0 38px; display: flex; align-items: center; gap: 8px; padding: 0 8px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-strong); }
+.touch-keyboard { display: flex; flex-direction: column; width: 100%; max-width: 100%; min-width: 0; min-height: 0; gap: 4px; padding-bottom: 4px; }
+.key-composition { box-sizing: border-box; height: 44px; min-height: 44px; flex: 0 0 44px; display: flex; align-items: center; gap: 8px; padding: 0 8px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-strong); }
 .touch-keyboard.composing .key-composition, .touch-keyboard.voice-preview .key-composition { border-color: var(--accent); }
 .key-composition-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .key-composition output { flex: 1; min-width: 0; color: var(--accent); font-size: 15px; overflow-x: auto; white-space: nowrap; }
 .key-composition output:empty::before { content: attr(data-placeholder); color: var(--muted); font-size: 12px; }
 .key-composition button { min-width: 32px; min-height: 30px; height: 30px; padding: 0 6px; background: transparent; border: 0; }
-.key-candidates { display: flex; gap: 4px; flex: 0 0 38px; min-height: 38px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
-.key-candidates button { flex-shrink: 0; min-width: 46px; min-height: 38px; padding: 3px 10px; border: 0; background: transparent; font-size: 18px; white-space: nowrap; }
+.key-candidates { display: flex; gap: 4px; flex: 0 0 46px; min-height: 46px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
+.key-candidates button { flex-shrink: 0; min-width: 48px; min-height: 44px; height: 44px; padding: 3px 10px; border: 0; background: transparent; font-size: 18px; white-space: nowrap; }
 .key-candidates:has(.touch-key) { justify-content: center; }
-.key-rows { display: grid; grid-template-rows: repeat(4,minmax(36px,1fr)); gap: 5px; width: 100%; max-width: 100%; min-width: 0; min-height: 0; }
-.key-row { display: flex; gap: 4px; width: 100%; max-width: 100%; min-width: 0; }
+.key-rows { display: grid; grid-template-rows: repeat(4,minmax(50px,1fr)); gap: 5px; width: 100%; max-width: 100%; min-width: 0; min-height: 0; }
+.key-row { display: flex; gap: 5px; width: 100%; max-width: 100%; min-width: 0; }
 .key-row.row-1 { padding-inline: 14px; }
-.touch-key { width: 0; min-width: 0; max-width: 100%; min-height: 40px; height: 40px; flex: 1 1 0px; padding: 0; border-radius: 5px; font-size: 19px; font-weight: 500; touch-action: none; user-select: none; }
+.touch-key { width: 0; min-width: 0; max-width: 100%; min-height: 50px; height: 52px; flex: 1 1 0px; padding: 0; border-radius: 5px; font-size: 20px; font-weight: 500; touch-action: none; user-select: none; }
 .touch-key.wide-key { flex: 1.5; font-size: 14px; background: var(--panel-strong); }
 .touch-key.space-key { flex: 4; font-size: 13px; }
 .ime-mode[data-ime-view="edit"] .workspace { grid-template-rows: 40px minmax(68px,1fr) auto; }
@@ -69,6 +69,13 @@
 .ime-mode[data-ime-view="text"] .touch-keyboard { justify-content: end; }
 .ime-mode[data-ime-view="text"] .key-rows { grid-template-rows: repeat(4, minmax(44px,1fr)); }
 .ime-mode[data-ime-view="text"] .touch-key { height: 48px; }
+@media (max-height: 600px) {
+  .key-composition { height: 40px; min-height: 40px; flex-basis: 40px; }
+  .key-candidates { flex-basis: 42px; min-height: 42px; }
+  .key-candidates button { min-height: 40px; height: 40px; }
+  .key-rows { grid-template-rows: repeat(4,minmax(44px,1fr)); }
+  .touch-key { min-height: 44px; height: 46px; }
+}
 @media (max-height: 350px) {
   .ime-mode[data-ime-view="edit"] .preview-stage { max-width: 220px; }
   .touch-key { height: 36px; min-height: 36px; }

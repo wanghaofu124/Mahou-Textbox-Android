@@ -74,7 +74,7 @@
       this.renderKeys();
     }
     query() {
-      this.candidates = [];
+      if (!this.composition) this.candidates = [];
       this.renderCandidates();
       const id = ++this.sequence;
       clearTimeout(this.timeout);
@@ -137,6 +137,7 @@
       let timer, repeated = false;
       const stop = () => { clearTimeout(timer); clearInterval(timer); };
       button.addEventListener("pointerdown", event => {
+        event.preventDefault();
         repeated = false;
         if (action === "delete") {
           button.setPointerCapture(event.pointerId);
@@ -188,9 +189,11 @@
         for (const item of this.candidates) {
           const button = document.createElement("button"); button.type = "button";
           button.textContent = item.w; button.setAttribute("aria-label", `候选词 ${item.w}`);
+          button.addEventListener("pointerdown", event => event.preventDefault());
           button.addEventListener("click", () => this.choose(item)); fragment.appendChild(button);
         }
         const raw = document.createElement("button"); raw.type = "button"; raw.textContent = this.composition;
+        raw.addEventListener("pointerdown", event => event.preventDefault());
         raw.addEventListener("click", () => this.choose(null)); fragment.appendChild(raw);
       } else {
         fragment.append(this.button("向左移动光标", "left", "chevron-left"), this.button("全选", "all", "text-select"), this.button("向右移动光标", "right", "chevron-right"));
@@ -202,7 +205,7 @@
         ));
       }
       this.candidateRow.replaceChildren(fragment); this.candidateRow.scrollLeft = 0;
-      window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
+      if (!this.composition) window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
     }
   }
   window.MahouTouchKeyboard = TouchKeyboard;

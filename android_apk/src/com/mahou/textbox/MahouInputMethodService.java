@@ -386,6 +386,10 @@ public class MahouInputMethodService extends InputMethodService {
     }
 
     private void send(String dataUrl) {
+        if (Build.VERSION.SDK_INT < 29) {
+            Toast.makeText(this, "此功能需要 Android 10 及以上", Toast.LENGTH_SHORT).show();
+            return;
+        }
         EditorInfo info = getCurrentInputEditorInfo();
         String target = info == null || info.packageName == null ? "" : info.packageName;
         if (!inputActive || sensitive(info) || !isQqTarget(target)) {

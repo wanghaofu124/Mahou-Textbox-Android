@@ -9,13 +9,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.inputmethodservice.InputMethodService;
 import android.net.Uri;
-import android.database.ContentObserver;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.util.Log;
@@ -65,10 +63,6 @@ public class MahouInputMethodService extends InputMethodService {
     private int offerGeneration;
     private final Runnable dropOfferedImage = this::dropOfferedImageNow;
     private boolean destroyed, inputActive, exportBusy, switchingKeyboard;
-    private long inputSession;
-    private String fieldKey = "";
-    private String typedMirror = "";
-    private String pendingSendUrl = "";
     private String captionEditorTarget = "";
     private volatile boolean pendingCaptionSend;
     private int captionSendWaits;
@@ -77,7 +71,7 @@ public class MahouInputMethodService extends InputMethodService {
             if (!pendingCaptionSend || destroyed) return;
             EditorInfo info = getCurrentInputEditorInfo();
             String target = info == null || info.packageName == null ? "" : info.packageName;
-            if (!inputActive || !QqSendAccessibilityService.isTarget(target) || !captionEditorTarget.equals(target)) {
+            if (!inputActive || !isQqTarget(target) || !captionEditorTarget.equals(target)) {
                 if (++captionSendWaits >= 100) {
                     pendingCaptionSend = false;
                     captionSendWaits = 0;
@@ -90,9 +84,6 @@ public class MahouInputMethodService extends InputMethodService {
             evaluate("window.sendCurrentImageToQQ&&window.sendCurrentImageToQQ();");
         }
     };
-    private final ContentObserver accessibilitySetting = new ContentObserver(main) {
-        @Override public void onChange(boolean selfChange) { deliverTarget(); }
-    };
     private final BroadcastReceiver changes = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (AssetStore.ACTION_ASSETS_CHANGED.equals(intent.getAction()))
@@ -103,13 +94,13 @@ public class MahouInputMethodService extends InputMethodService {
             else if (InputMethodSupport.ACTION_MODE_CHANGED.equals(intent.getAction())) {
                 requestHideSelf(0);
                 deliverTarget();
-            } else if (QqSendAccessibilityService.ACTION_RESULT.equals(intent.getAction())) {
-                evaluate("window.receiveDirectSendResult&&window.receiveDirectSendResult("
-                        + JSONObject.quote(intent.getStringExtra("result")) + ");");
-                deliverTarget();
             } else deliverState();
         }
     };
+
+    private static boolean isQqTarget(String packageName) {
+        return "com.tencent.mobileqq".equals(packageName) || "com.tencent.tim".equals(packageName);
+    }
 
     static void leaveForTextKeyboard() {
         MahouInputMethodService service = active;
@@ -118,7 +109,7 @@ public class MahouInputMethodService extends InputMethodService {
 
     static boolean queueCaptionSendAfterEditor() {
         MahouInputMethodService service = active;
-        if (service == null || service.destroyed || !QqSendAccessibilityService.isTarget(service.captionEditorTarget)) return false;
+        if (service == null || service.destroyed || !isQqTarget(service.captionEditorTarget)) return false;
         service.pendingCaptionSend = true;
         service.captionSendWaits = 0;
         service.main.removeCallbacks(service.continueCaptionSend);
@@ -132,9 +123,7 @@ public class MahouInputMethodService extends InputMethodService {
         IntentFilter filter = new IntentFilter(GeneratorStateStore.ACTION_STATE_CHANGED);
         filter.addAction(AssetStore.ACTION_ASSETS_CHANGED);
         filter.addAction(InputMethodSupport.ACTION_MODE_CHANGED);
-        filter.addAction(QqSendAccessibilityService.ACTION_RESULT);
         ContextCompat.registerReceiver(this, changes, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
-        getContentResolver().registerContentObserver(Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES), false, accessibilitySetting);
         androidx.core.app.NotificationManagerCompat.from(this).cancel(6001);
     }
 
@@ -312,9 +301,7 @@ public class MahouInputMethodService extends InputMethodService {
 
     @Override public void onStartInput(EditorInfo info, boolean restarting) {
         super.onStartInput(info, restarting);
-        ++inputSession;
         inputActive = true;
-        trackField(info);
         deliverTarget();
     }
 
@@ -329,22 +316,14 @@ public class MahouInputMethodService extends InputMethodService {
         checkImeWebViewHealth();
     }
 
-    // InputMethodService owns Back, including predictive Back. Hidden keyboards must not consume it.
-    @Override public void onWindowHidden() {
-        evaluate("window.onImeHidden&&window.onImeHidden();");
-        super.onWindowHidden();
-    }
-
     @Override public void onFinishInput() {
         inputActive = false;
-        ++inputSession;
         evaluate("window.onInputEnded&&window.onInputEnded();");
         super.onFinishInput();
     }
 
     @Override public void onDestroy() {
         destroyed = true;
-        ++inputSession;
         main.removeCallbacks(dropOfferedImage);
         main.removeCallbacks(continueCaptionSend);
         Uri current = offeredImage;
@@ -353,7 +332,6 @@ public class MahouInputMethodService extends InputMethodService {
         sweepOfferedImages(null);
         worker.shutdownNow();
         try { unregisterReceiver(changes); } catch (IllegalArgumentException ignored) {}
-        getContentResolver().unregisterContentObserver(accessibilitySetting);
         ImeReturnChip.hide(this);
         ImeReturnNotifier.hide(this);
         if (active == this) active = null;
@@ -380,14 +358,8 @@ public class MahouInputMethodService extends InputMethodService {
         try {
             EditorInfo info = getCurrentInputEditorInfo();
             String target = info == null ? "" : info.packageName;
-            boolean own = getPackageName().equals(target);
-            int inputClass = info == null ? 0 : info.inputType & InputType.TYPE_MASK_CLASS;
             JSONObject result = new JSONObject().put("active", inputActive).put("sensitive", sensitive(info))
-                    .put("targetPackage", target).put("session", inputSession)
-                    .put("textOnly", own || sensitive(info) || !InputMethodSupport.isImageMode(this))
-                    .put("numeric", inputClass == InputType.TYPE_CLASS_NUMBER || inputClass == InputType.TYPE_CLASS_PHONE)
-                    .put("directSendEnabled", QqSendAccessibilityService.isEnabled(this))
-                    .put("canSend", inputActive && !sensitive(info) && QqSendAccessibilityService.isTarget(target));
+                    .put("canSend", inputActive && !sensitive(info) && isQqTarget(target));
             evaluate("window.receiveInputTarget&&window.receiveInputTarget(" + JSONObject.quote(result.toString()) + ");");
         } catch (Exception ignored) {}
     }
@@ -412,56 +384,6 @@ public class MahouInputMethodService extends InputMethodService {
         evaluate("window.setImeSendState&&window.setImeSendState(" + JSONObject.quote(state) + "," + JSONObject.quote(message) + ");");
     }
 
-    private InputConnection connection(long session) {
-        return !destroyed && inputActive && session == inputSession ? getCurrentInputConnection() : null;
-    }
-
-    private void edit(String action, long session) {
-        InputConnection connection = connection(session);
-        if (connection == null) return;
-        if ("delete".equals(action)) {
-            noteDelete();
-            CharSequence selected = connection.getSelectedText(0);
-            if (selected != null && selected.length() > 0) connection.commitText("", 1);
-            else if (Build.VERSION.SDK_INT >= 24) connection.deleteSurroundingTextInCodePoints(1, 0);
-            else {
-                CharSequence before = connection.getTextBeforeCursor(2, 0);
-                int count = before != null && before.length() == 2 && Character.isSurrogatePair(before.charAt(0), before.charAt(1)) ? 2 : 1;
-                connection.deleteSurroundingText(count, 0);
-            }
-        } else if ("all".equals(action)) connection.performContextMenuAction(android.R.id.selectAll);
-        else if ("left".equals(action) || "right".equals(action)) {
-            int code = "left".equals(action) ? KeyEvent.KEYCODE_DPAD_LEFT : KeyEvent.KEYCODE_DPAD_RIGHT;
-            connection.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, code));
-            connection.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, code));
-        } else if ("enter".equals(action)) {
-            EditorInfo info = getCurrentInputEditorInfo();
-            int option = info == null ? EditorInfo.IME_ACTION_NONE : info.imeOptions & EditorInfo.IME_MASK_ACTION;
-            if (option == EditorInfo.IME_ACTION_SEND || option == EditorInfo.IME_ACTION_SEARCH
-                    || option == EditorInfo.IME_ACTION_GO || option == EditorInfo.IME_ACTION_DONE || option == EditorInfo.IME_ACTION_NEXT)
-                connection.performEditorAction(option);
-            else connection.commitText("\n", 1);
-        }
-    }
-
-    private void trackField(EditorInfo info) {
-        String key = (info == null ? "" : info.packageName) + ":" + (info == null ? 0 : info.fieldId);
-        if (!key.equals(fieldKey)) { fieldKey = key; typedMirror = ""; }
-    }
-
-    private void noteCommit(String text) {
-        if (text == null || text.isEmpty()) return;
-        typedMirror = typedMirror + text;
-        if (typedMirror.length() > 180) typedMirror = typedMirror.substring(typedMirror.length() - 180);
-    }
-
-    private void noteDelete() {
-        if (!typedMirror.isEmpty()) {
-            int end = typedMirror.offsetByCodePoints(typedMirror.length(), -1);
-            typedMirror = typedMirror.substring(0, end);
-        }
-    }
-
     private void readDraft() {
         if (!inputActive || sensitive(getCurrentInputEditorInfo())) { notice("安全输入框不读取草稿"); return; }
         InputConnection connection = getCurrentInputConnection();
@@ -477,7 +399,6 @@ public class MahouInputMethodService extends InputMethodService {
                 CharSequence after = connection.getTextAfterCursor(181, 0);
                 text = (before == null ? "" : before.toString()) + (after == null ? "" : after.toString());
             }
-            if (text.trim().isEmpty()) text = typedMirror;
             if (text.trim().isEmpty()) { notice("当前输入框是空的"); return; }
             if (text.length() > 180) { notice("草稿超过 180 字，请缩短后再读取"); return; }
             GeneratorStateStore.update(this, new JSONObject().put("text", text).toString());
@@ -489,7 +410,7 @@ public class MahouInputMethodService extends InputMethodService {
     private void send(String dataUrl) {
         EditorInfo info = getCurrentInputEditorInfo();
         String target = info == null || info.packageName == null ? "" : info.packageName;
-        if (!inputActive || sensitive(info) || !QqSendAccessibilityService.isTarget(target)) {
+        if (!inputActive || sensitive(info) || !isQqTarget(target)) {
             updateImeSendState("error", "请先打开要发送图片的 QQ 或 TIM 聊天");
             notice("请先打开要发送图片的 QQ 或 TIM 聊天");
             return;
@@ -502,7 +423,6 @@ public class MahouInputMethodService extends InputMethodService {
         }
         exportBusy = true;
         updateImeSendState("busy", "正在准备图片…");
-        pendingSendUrl = dataUrl;
         worker.execute(() -> {
             File temporary = null;
             try {
@@ -767,16 +687,6 @@ public class MahouInputMethodService extends InputMethodService {
             try { return AssetStore.getAppInfo(MahouInputMethodService.this); }
             catch (Exception error) { return "{}"; }
         }
-        @JavascriptInterface public void commitText(String text, long session) {
-            if (text == null || text.length() > 4096) return;
-            main.post(() -> {
-                InputConnection connection = connection(session);
-                if (connection == null) return;
-                connection.commitText(text, 1);
-                noteCommit(text);
-            });
-        }
-        @JavascriptInterface public void editKey(String action, long session) { main.post(() -> edit(action, session)); }
         @JavascriptInterface public void importCurrentDraft() { main.post(MahouInputMethodService.this::readDraft); }
         @JavascriptInterface public void requestInputTarget() { main.post(MahouInputMethodService.this::deliverTarget); }
         @JavascriptInterface public void shareToQQ(String dataUrl) { main.post(() -> send(dataUrl)); }
@@ -784,15 +694,7 @@ public class MahouInputMethodService extends InputMethodService {
         @JavascriptInterface public void hidePanel() { main.post(() -> { if (!destroyed) requestHideSelf(0); }); }
         @JavascriptInterface public void previousKeyboard() { main.post(MahouInputMethodService.this::previousKeyboard); }
         @JavascriptInterface public void openCaptionEditor() { main.post(MahouInputMethodService.this::openCaptionEditor); }
-        @JavascriptInterface public void debugMark(String message) {
-            // #region agent log
-            Log.i("MahouDebug", message == null ? "" : message);
-            // #endregion
-        }
         @JavascriptInterface public void showToast(String text) { main.post(() -> notice(text)); }
-        @JavascriptInterface public String getDirectSendStatus() { return QqSendAccessibilityService.status(MahouInputMethodService.this); }
-        @JavascriptInterface public void openDirectSendSettings() { main.post(() -> notice("辅助发送已停用")); }
-        @JavascriptInterface public void cancelDirectSend() { main.post(QqSendAccessibilityService::cancel); }
         @JavascriptInterface public void openMainEditor() {
             main.post(() -> {
                 startActivity(new Intent(MahouInputMethodService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));

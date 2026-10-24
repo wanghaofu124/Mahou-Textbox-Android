@@ -16,7 +16,6 @@
     qqButton.disabled = !target.canSend;
   }
 
-  window.isImeDraftEditing = () => false;
   window.receiveInputTarget = function (value) {
     try {
       const info = typeof value === "string" ? JSON.parse(value) : value;
@@ -34,7 +33,6 @@
     if (sendState !== "busy") resetSendButton();
     document.getElementById("readDraftButton").disabled = true;
   };
-  window.onImeHidden = () => {};
   window.receiveImeSendState = function (state, message) {
     clearTimeout(sendStateTimer);
     sendState = state;
@@ -55,21 +53,10 @@
       }, state === "ready" ? 6500 : 4000);
     }
   };
-  window.receiveDirectSendResult = value => {
-    try {
-      const result = typeof value === "string" ? JSON.parse(value) : value;
-      if (result && result.message) showAppNotice(result.message);
-    } catch (_) {}
-  };
   document.getElementById("readDraftButton").addEventListener("click", () => window.AndroidBridge?.importCurrentDraft?.());
   document.getElementById("hideImeButton").addEventListener("click", () => window.AndroidBridge?.hidePanel?.());
   document.getElementById("previousKeyboardButton").addEventListener("click", () => window.AndroidBridge?.previousKeyboard?.());
   document.getElementById("imeEditorButton").addEventListener("click", () => window.AndroidBridge?.openMainEditor?.());
-  window.setupImageDoubleTap(document.getElementById("preview"), () => {
-    // #region agent log
-    window.AndroidBridge?.debugMark?.("caption-editor original-keyboard");
-    // #endregion
-    window.AndroidBridge?.openCaptionEditor?.();
-  });
+  window.setupImageDoubleTap(document.getElementById("preview"), () => window.AndroidBridge?.openCaptionEditor?.());
   window.AndroidBridge?.requestInputTarget?.();
 })();

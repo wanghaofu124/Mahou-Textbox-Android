@@ -23,7 +23,6 @@ import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.content.ContentValues;
-import android.graphics.BitmapFactory;
 import android.os.Environment;
 import android.provider.MediaStore;
 import java.io.FileInputStream;
@@ -50,6 +49,7 @@ public class MahouInputMethodService extends InputMethodService {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static final long OFFER_KEEP_MS = 90_000L;
+    private static final String ALBUM_PATH = Environment.DIRECTORY_PICTURES + "/Mahou/";
     private WebView webView;
     private FrameLayout inputRoot;
     private int inputViewHeight;
@@ -406,21 +406,13 @@ public class MahouInputMethodService extends InputMethodService {
             Uri media = null;
             try {
                 temporary = PopupShareImage.prepare(getApplicationContext(), dataUrl);
-                BitmapFactory.Options bounds = new BitmapFactory.Options();
-                bounds.inJustDecodeBounds = true;
-                BitmapFactory.decodeFile(temporary.getPath(), bounds);
                 sweep();
                 long now = System.currentTimeMillis();
                 ContentValues values = new ContentValues();
                 values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + now + ".png");
                 values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-                values.put(MediaStore.Images.Media.DATE_TAKEN, now);
-                values.put(MediaStore.Images.Media.WIDTH, bounds.outWidth);
-                values.put(MediaStore.Images.Media.HEIGHT, bounds.outHeight);
-                if (Build.VERSION.SDK_INT >= 29) {
-                    values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Mahou");
-                    values.put(MediaStore.Images.Media.IS_PENDING, 1);
-                }
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, ALBUM_PATH);
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
                 media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
                 if (media == null) throw new IOException("insert");
                 try (InputStream input = new FileInputStream(temporary); OutputStream output = getContentResolver().openOutputStream(media)) {
@@ -428,11 +420,9 @@ public class MahouInputMethodService extends InputMethodService {
                     byte[] buffer = new byte[16384];
                     for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
                 }
-                if (Build.VERSION.SDK_INT >= 29) {
-                    ContentValues ready = new ContentValues();
-                    ready.put(MediaStore.Images.Media.IS_PENDING, 0);
-                    getContentResolver().update(media, ready, null, null);
-                }
+                ContentValues ready = new ContentValues();
+                ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(media, ready, null, null);
                 PopupShareImage.discard(temporary);
                 main.post(() -> {
                     exportBusy = false;
@@ -458,16 +448,15 @@ public class MahouInputMethodService extends InputMethodService {
     private void sweep() {
         if (Build.VERSION.SDK_INT < 29) return;
         String[] projection = { MediaStore.Images.Media._ID };
-        String selection = MediaStore.Images.Media.DISPLAY_NAME + " LIKE ? AND " + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?";
-        String[] args = { "mahou-%", Environment.DIRECTORY_PICTURES + "/Mahou%" };
+        String selection = MediaStore.Images.Media.RELATIVE_PATH + " = ? AND " + MediaStore.Images.Media.DISPLAY_NAME + " LIKE ?";
+        String[] args = { ALBUM_PATH, "mahou-%" };
         try (android.database.Cursor cursor = getContentResolver().query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, args, null)) {
-            if (cursor == null) return;
             int id = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
             while (cursor.moveToNext()) {
                 getContentResolver().delete(android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(id)), null, null);
             }
-        } catch (RuntimeException ignored) {}
+        }
     }
 
     private void copy(String dataUrl) {

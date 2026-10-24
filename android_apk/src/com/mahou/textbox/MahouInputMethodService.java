@@ -190,14 +190,6 @@ public class MahouInputMethodService extends InputMethodService {
             deliverState();
             deliverTarget();
         }, new LocalWebContent.WebViewLifecycleListener() {
-            @Override public void onPageStarted(String url) {
-                Log.i("MahouIme", "page started: " + url);
-            }
-
-            @Override public void onPageFinished(String url) {
-                if (webView == view) Log.i("MahouIme", "page finished: " + url);
-            }
-
             @Override public void onMainFrameError(String url, int errorCode, String description) {
                 Log.e("MahouIme", "main page error " + errorCode + " " + description + " url=" + url);
             }
@@ -246,12 +238,7 @@ public class MahouInputMethodService extends InputMethodService {
             current.evaluateJavascript("(function(){var e=document.querySelector('.workspace');if(!e)return false;var r=e.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(e).display!=='none';})()", value -> {
                 if (destroyed || webView != current || generation != healthCheckGeneration) return;
                 if (!"true".equals(value)) recoverImeWebView(current, "page-health-check");
-                else {
-                    Log.i("MahouIme", "page health ok; view=" + current.getWidth() + "x" + current.getHeight()
-                            + " shown=" + current.isShown() + " alpha=" + current.getAlpha()
-                            + " layer=" + current.getLayerType());
-                    refreshImeView();
-                }
+                else refreshImeView();
             });
         }, 1200);
     }
@@ -290,9 +277,6 @@ public class MahouInputMethodService extends InputMethodService {
         if (pixels <= 0 || pixels == appliedViewport) return;
         appliedViewport = pixels;
         int css = Math.max(1, Math.round(pixels / getResources().getDisplayMetrics().density));
-        // #region agent log
-        Log.i("MahouDebug", "viewport px=" + pixels + " css=" + css + " density=" + getResources().getDisplayMetrics().density);
-        // #endregion
         webView.evaluateJavascript("(function(){var w=" + css
                 + ";var m=document.querySelector('meta[name=viewport]');if(m)m.setAttribute('content','width='+w+',initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover');"
                 + "document.documentElement.style.width=w+'px';document.documentElement.style.maxWidth=w+'px';"
@@ -449,15 +433,6 @@ public class MahouInputMethodService extends InputMethodService {
         if (destroyed) return;
         EditorInfo info = getCurrentInputEditorInfo();
         InputConnection connection = getCurrentInputConnection();
-        String mimes = "";
-        if (Build.VERSION.SDK_INT >= 25 && info != null && info.contentMimeTypes != null) {
-            StringBuilder joined = new StringBuilder();
-            for (String mime : info.contentMimeTypes) {
-                if (joined.length() > 0) joined.append(',');
-                joined.append(mime);
-            }
-            mimes = joined.toString();
-        }
         boolean inserted = false;
         if (Build.VERSION.SDK_INT >= 25 && connection != null && info != null && target.equals(info.packageName)) {
             try {
@@ -466,9 +441,6 @@ public class MahouInputMethodService extends InputMethodService {
                 inserted = connection.commitContent(content, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null);
             } catch (RuntimeException ignored) {}
         }
-        // #region agent log
-        Log.i("MahouDebug", "send inserted=" + inserted + " mimes=" + mimes + " target=" + target);
-        // #endregion
         if (inserted) {
             String message = "图片已放入，请点击 QQ 输入框右侧的“+”发送图片。";
             updateImeSendState("inserted", message);
@@ -482,7 +454,6 @@ public class MahouInputMethodService extends InputMethodService {
 
     private void offerAlbumImage(File image) {
         Uri media = null;
-        String error = "";
         try {
             if (!image.isFile()) throw new IOException("missing");
             ContentValues values = new ContentValues();
@@ -504,14 +475,10 @@ public class MahouInputMethodService extends InputMethodService {
                 ready.put(MediaStore.Images.Media.IS_PENDING, 0);
                 getContentResolver().update(media, ready, null, null);
             }
-            int removed = sweepOfferedImages(media);
+            sweepOfferedImages(media);
             offeredImage = media;
             offerGeneration++;
-            Uri published = media;
             media = null;
-            // #region agent log
-            Log.i("MahouDebug", "album image=" + published + " removed=" + removed);
-            // #endregion
             main.post(() -> {
                 main.removeCallbacks(dropOfferedImage);
                 main.postDelayed(dropOfferedImage, OFFER_KEEP_MS);
@@ -521,12 +488,8 @@ public class MahouInputMethodService extends InputMethodService {
             });
             return;
         } catch (Exception | OutOfMemoryError failure) {
-            error = failure.getClass().getSimpleName();
             if (media != null) removeOfferedImage(media);
         }
-        // #region agent log
-        Log.i("MahouDebug", "album image error=" + error);
-        // #endregion
         main.post(() -> {
             updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
             notice("图片没能交给 QQ 识别，请重试");
@@ -540,10 +503,8 @@ public class MahouInputMethodService extends InputMethodService {
         worker.execute(() -> {
             if (generation != offerGeneration) return;
             offeredImage = null;
-            int removed = removeOfferedImage(current) + sweepOfferedImages(null);
-            // #region agent log
-            Log.i("MahouDebug", "album image dropped=" + current + " removed=" + removed);
-            // #endregion
+            removeOfferedImage(current);
+            sweepOfferedImages(null);
         });
     }
 
@@ -619,11 +580,9 @@ public class MahouInputMethodService extends InputMethodService {
         startActivity(ImeEditorActivity.intent(this).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION));
         if (builtInKeyboard) {
             requestHideSelf(0);
-            Log.i("MahouDebug", "caption-editor sheet built-in-keyboard");
         } else {
             // Keep the existing phone-keyboard flow as the default.
             handOffToTextKeyboard(false);
-            Log.i("MahouDebug", "caption-editor sheet original-keyboard");
         }
     }
 
@@ -663,9 +622,6 @@ public class MahouInputMethodService extends InputMethodService {
             switchingKeyboard = false;
             if (destroyed) return;
             String current = Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
-            // #region agent log
-            Log.i("MahouDebug", "handoff current=" + current + " fallback=" + keyboard);
-            // #endregion
             if (current != null && !current.startsWith(getPackageName() + "/")) InputMethodSupport.rememberTextKeyboard(this, current);
             else if (allowDirectSwitch && keyboard != null) {
                 try { switchInputMethod(keyboard); } catch (RuntimeException ignored) {}

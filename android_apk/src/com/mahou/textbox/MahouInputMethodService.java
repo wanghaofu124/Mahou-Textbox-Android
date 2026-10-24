@@ -23,6 +23,7 @@ import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.content.ContentValues;
+import android.graphics.Bitmap;
 import android.os.Environment;
 import android.provider.MediaStore;
 import java.io.FileInputStream;
@@ -450,6 +451,82 @@ public class MahouInputMethodService extends InputMethodService {
         });
     }
 
+    private void sendNative() {
+        EditorInfo info = getCurrentInputEditorInfo();
+        String target = info == null || info.packageName == null ? "" : info.packageName;
+        if (!inputActive || sensitive(info) || !isQqTarget(target)) {
+            updateImeSendState("error", "请先打开要发送图片的 QQ 或 TIM 聊天");
+            notice("请先打开要发送图片的 QQ 或 TIM 聊天");
+            return;
+        }
+        if (destroyed) return;
+        if (exportBusy) {
+            updateImeSendState("error", "上一张还在处理，请稍候");
+            notice("上一张还在处理");
+            return;
+        }
+        exportBusy = true;
+        updateImeSendState("busy", "正在准备图片…");
+        worker.execute(() -> {
+            Bitmap bitmap = null;
+            Uri media = null;
+            try {
+                bitmap = StickerRenderer.render(getApplicationContext(),
+                        RenderParams.fromState(getApplicationContext(), exportWidth()));
+                sweep();
+                long now = System.currentTimeMillis();
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + now + ".png");
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                values.put(MediaStore.Images.Media.DATE_TAKEN, now);
+                values.put(MediaStore.Images.Media.WIDTH, bitmap.getWidth());
+                values.put(MediaStore.Images.Media.HEIGHT, bitmap.getHeight());
+                if (Build.VERSION.SDK_INT >= 29) {
+                    values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Mahou");
+                    values.put(MediaStore.Images.Media.IS_PENDING, 1);
+                }
+                media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (media == null) throw new IOException("insert");
+                try (OutputStream output = getContentResolver().openOutputStream(media)) {
+                    if (output == null) throw new IOException("open");
+                    if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new IOException("compress");
+                }
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues ready = new ContentValues();
+                    ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+                    getContentResolver().update(media, ready, null, null);
+                }
+                main.post(() -> {
+                    exportBusy = false;
+                    if (destroyed) return;
+                    main.removeCallbacks(sweepAlbum);
+                    main.postDelayed(sweepAlbum, OFFER_KEEP_MS);
+                    String message = "图片已保存到相册。点 QQ 输入框右侧“+”→“相册”，选择最新的魔裁图片发送。";
+                    updateImeSendState("ready", message);
+                    notice(message, 5200);
+                });
+            } catch (Exception | OutOfMemoryError error) {
+                main.post(() -> {
+                    exportBusy = false;
+                    updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
+                    notice("图片没能交给 QQ 识别，请重试");
+                });
+                if (media != null) getContentResolver().delete(media, null, null);
+            } finally {
+                if (bitmap != null) bitmap.recycle();
+            }
+        });
+    }
+
+    private int exportWidth() {
+        switch (getSharedPreferences("mahou_popup_prefs", MODE_PRIVATE).getString("qqExportSize", "normal")) {
+            case "small": return 720;
+            case "large": return 1280;
+            case "xlarge": return 1600;
+            default: return 1000;
+        }
+    }
+
     private void sweep() {
         if (Build.VERSION.SDK_INT < 29) return;
         String[] projection = { MediaStore.Images.Media._ID };
@@ -578,6 +655,7 @@ public class MahouInputMethodService extends InputMethodService {
         @JavascriptInterface public void importCurrentDraft() { main.post(MahouInputMethodService.this::readDraft); }
         @JavascriptInterface public void requestInputTarget() { main.post(MahouInputMethodService.this::deliverTarget); }
         @JavascriptInterface public void shareToQQ(String dataUrl) { main.post(() -> send(dataUrl)); }
+        @JavascriptInterface public void shareToQQNative() { main.post(() -> sendNative()); }
         @JavascriptInterface public void shareImage(String dataUrl) { main.post(() -> copy(dataUrl)); }
         @JavascriptInterface public void hidePanel() { main.post(() -> { if (!destroyed) requestHideSelf(0); }); }
         @JavascriptInterface public void previousKeyboard() { main.post(MahouInputMethodService.this::previousKeyboard); }

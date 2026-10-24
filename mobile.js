@@ -2176,7 +2176,12 @@ async function shareToQQ() {
   if (shareBusy) { showAppNotice("上一张还在处理"); return; }
   shareBusy = true;
   const waitForImeResult = document.documentElement.classList.contains("ime-mode");
-  if (waitForImeResult) window.setImeSendState?.("busy", "正在生成图片…");
+  if (waitForImeResult) {
+    // ime.html only runs in the IME's own WebView; its bridge renders natively from the stored state.
+    window.setImeSendState?.("busy", "正在生成图片…");
+    window.AndroidBridge.shareToQQNative();
+    return;
+  }
   let handedOff = false;
   try {
     const dataUrl = await window.exportImageDataUrl(true);

@@ -8,7 +8,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -284,10 +283,7 @@ final class StickerRenderer {
                 bitmap = BitmapFactory.decodeStream(input);
             }
         }
-        if (bitmap == null) {
-            Log.w("MahouRender", "素材无法加载：" + path);
-            throw new IOException("素材无法加载：" + path);
-        }
+        if (bitmap == null) throw new IOException("素材无法加载：" + path);
         return bitmap;
     }
 

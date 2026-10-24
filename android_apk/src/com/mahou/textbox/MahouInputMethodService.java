@@ -453,7 +453,8 @@ public class MahouInputMethodService extends InputMethodService {
 
     private void sendNative() {
         if (Build.VERSION.SDK_INT < 29) {
-            Toast.makeText(this, "此功能需要 Android 10 及以上", Toast.LENGTH_SHORT).show();
+            updateImeSendState("error", "此功能需要 Android 10 及以上");
+            notice("此功能需要 Android 10 及以上");
             return;
         }
         EditorInfo info = getCurrentInputEditorInfo();

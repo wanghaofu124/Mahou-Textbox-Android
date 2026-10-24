@@ -2182,17 +2182,15 @@ async function shareToQQ() {
     window.AndroidBridge.shareToQQNative();
     return;
   }
-  let handedOff = false;
   try {
     const dataUrl = await window.exportImageDataUrl(true);
     window.AndroidBridge.shareToQQ(dataUrl);
-    handedOff = waitForImeResult;
   } catch (error) {
     shareBusy = false;
     if (waitForImeResult) window.setImeSendState?.("error", `图片生成失败：${error.message}`);
     showAppNotice(`发到 QQ 失败：${error.message}`);
   } finally {
-    if (!handedOff) shareBusy = false;
+    shareBusy = false;
   }
 }
 

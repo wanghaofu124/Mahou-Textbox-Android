@@ -141,6 +141,7 @@
       button.addEventListener("pointerdown", event => {
         this.press(action);
         if (action === "delete") {
+          stop();
           button.setPointerCapture(event.pointerId);
           timer = setTimeout(() => { timer = setInterval(() => this.press(action), 65); }, 400);
         }

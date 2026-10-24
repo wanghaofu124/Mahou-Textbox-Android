@@ -20,6 +20,7 @@
       this.output = root.querySelector("output");
       this.compositionLabel = root.querySelector(".key-composition-label");
       this.candidateRow = root.querySelector(".key-candidates");
+      root.addEventListener("pointerdown", event => event.preventDefault());
       root.querySelector('[data-action="cancel"]').addEventListener("click", () => this.clear());
       this.startWorker();
       this.renderKeys();
@@ -95,12 +96,13 @@
       const text = candidate ? candidate.w : this.composition;
       if (this.options.commit(text) === false) return;
       this.composition = candidate ? this.composition.slice(candidate.matchLength) : "";
+      this.candidates = [];
       this.query();
     }
     flush() { if (this.composition) this.choose(this.candidates[0]); }
     press(key) {
       if (key === "delete") {
-        if (this.composition) { this.composition = this.composition.slice(0, -1); this.query(); }
+        if (this.composition) { this.composition = this.composition.slice(0, -1); this.candidates = []; this.query(); }
         else this.options.edit("delete");
       } else if (key === "voice") {
         this.flush();
@@ -137,7 +139,6 @@
       let timer, repeated = false;
       const stop = () => { clearTimeout(timer); clearInterval(timer); };
       button.addEventListener("pointerdown", event => {
-        event.preventDefault();
         repeated = false;
         if (action === "delete") {
           button.setPointerCapture(event.pointerId);
@@ -189,11 +190,9 @@
         for (const item of this.candidates) {
           const button = document.createElement("button"); button.type = "button";
           button.textContent = item.w; button.setAttribute("aria-label", `候选词 ${item.w}`);
-          button.addEventListener("pointerdown", event => event.preventDefault());
           button.addEventListener("click", () => this.choose(item)); fragment.appendChild(button);
         }
         const raw = document.createElement("button"); raw.type = "button"; raw.textContent = this.composition;
-        raw.addEventListener("pointerdown", event => event.preventDefault());
         raw.addEventListener("click", () => this.choose(null)); fragment.appendChild(raw);
       } else {
         fragment.append(this.button("向左移动光标", "left", "chevron-left"), this.button("全选", "all", "text-select"), this.button("向右移动光标", "right", "chevron-right"));

@@ -178,6 +178,7 @@
       window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
     }
     renderCandidates() {
+      this.options.preedit(this.composition);
       const preview = this.composition || this.voicePreview;
       this.output.textContent = preview;
       this.output.dataset.placeholder = this.voiceListening && !preview ? "正在听，请说出台词…" : "拼音或语音识别内容会显示在这里";

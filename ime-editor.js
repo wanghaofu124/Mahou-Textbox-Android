@@ -76,6 +76,7 @@
     textArea.setSelectionRange(textArea.value.length, textArea.value.length);
     keyboard = new window.MahouTouchKeyboard(document.getElementById("builtinKeyboard"), {
       commit: insertText,
+      preedit: (text) => { window.imePreedit = text; requestRender(); },
       edit: editText,
       voice: () => {
         keyboard.setVoicePreview("正在准备本机语音包…", false, true);

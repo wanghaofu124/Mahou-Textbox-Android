@@ -909,10 +909,10 @@ function drawSegmentedText(text, x, y, baseColor, bracketColor, context = ctx) {
   }
 }
 
-function drawDialogText(character, context = ctx) {
+function drawDialogText(character, context = ctx, preedit = "") {
   const [x1, y1] = TEXT_TOP_LEFT;
   const [x2, y2] = TEXT_BOTTOM_RIGHT;
-  const text = lineText.value.trim() || " ";
+  const text = (lineText.value + preedit).trim() || " ";
   const fitted = fitText(text, x2 - x1, y2 - y1, context);
   const bracketColor = character.key === "anan" ? rgb(character.color) : "rgb(137, 177, 251)";
   setTextFont(fitted.size, context);
@@ -1008,7 +1008,7 @@ async function render(options = {}) {
     drawRoleImage(role, character, context);
     const editingInline = (lineText.classList.contains("inline-line-text") && document.activeElement === lineText)
       || Boolean(window.isImeDraftEditing?.());
-    if (options.forceDialogText || !editingInline) drawDialogText(character, context);
+    if (options.forceDialogText || !editingInline) drawDialogText(character, context, options.forceDialogText ? "" : window.imePreedit);
     drawCharacterName(character, context);
     return true;
   } catch (error) {

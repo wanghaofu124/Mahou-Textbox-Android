@@ -506,10 +506,12 @@ public class MahouInputMethodService extends InputMethodService {
                     notice(message, 5200);
                 });
             } catch (Exception | OutOfMemoryError error) {
+                Log.w("MahouIme", "sendNative failed", error);
+                String failure = bitmap == null ? "生成图片失败，请重试" : "图片没能交给 QQ 识别，请重试";
                 main.post(() -> {
                     exportBusy = false;
-                    updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
-                    notice("图片没能交给 QQ 识别，请重试");
+                    updateImeSendState("error", failure);
+                    notice(failure);
                 });
                 if (media != null) getContentResolver().delete(media, null, null);
             } finally {

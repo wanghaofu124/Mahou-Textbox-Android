@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -31,7 +32,6 @@ final class StickerRenderer {
     private static final int MIN_FONT_SIZE = 12;
     private static final int MAX_FONT_SIZE = 145;
     private static final int BUILT_IN_BACKGROUND_COUNT = 16;
-    private static final int MAX_NAME_BLOCKS = 32;
     private static final int BASE_COLOR = 0xFF111218;
     private static final int WHITE = 0xFFFFFFFF;
     private static final int BRACKET_COLOR = 0xFF89B1FB;
@@ -190,7 +190,7 @@ final class StickerRenderer {
             characterKey = custom.getString("id");
             JSONObject image = emotions.isEmpty() ? custom : emotions.get(emotion - 1);
             rolePath = image.getString("path");
-            version += custom.getString("sha256") + image.getString("sha256");
+            version += custom.getString("sha256") + image.getString("sha256") + custom.getJSONObject("fit");
         }
 
         int width = params.width;
@@ -228,7 +228,7 @@ final class StickerRenderer {
             }
         } else {
             JSONArray blocks = custom.getJSONArray("nameBlocks");
-            for (int i = 0; i < Math.min(MAX_NAME_BLOCKS, blocks.length()); i++) {
+            for (int i = 0; i < blocks.length(); i++) {
                 JSONObject block = blocks.getJSONObject(i);
                 drawName(canvas, block.getString("text"), block.getDouble("x"), block.getDouble("y"),
                         block.getDouble("size"), Color.parseColor(block.getString("color")), 3);
@@ -284,7 +284,10 @@ final class StickerRenderer {
                 bitmap = BitmapFactory.decodeStream(input);
             }
         }
-        if (bitmap == null) throw new IOException("素材无法加载：" + path);
+        if (bitmap == null) {
+            Log.w("MahouRender", "素材无法加载：" + path);
+            throw new IOException("素材无法加载：" + path);
+        }
         return bitmap;
     }
 

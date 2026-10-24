@@ -142,6 +142,8 @@ final class StickerRenderer {
 
     private static final Paint textPaint = new Paint(FLAGS);
     private static final Paint bitmapPaint = new Paint(FLAGS);
+    // mobile.js draws with textBaseline "top"; on this font the baseline is 0.8 em below that top (measured on device).
+    private static final float TOP_TO_BASELINE = 0.8f;
     private static Typeface typeface;
     // The key carries the sha256 of every custom asset in use, so an edited asset never hits a stale composite.
     private static String cacheKey = "";
@@ -384,8 +386,7 @@ final class StickerRenderer {
     }
 
     private static void drawSegmentedText(Canvas canvas, String line, float x, float y, int bracketColor) {
-        // Needs device calibration: mobile.js uses textBaseline "top"; this assumes ascent is the em top.
-        float baseline = y - textPaint.ascent();
+        float baseline = y + TOP_TO_BASELINE * textPaint.getTextSize();
         boolean inBracket = false;
         float cursor = x;
         for (int i = 0; i < line.length(); ) {
@@ -405,8 +406,7 @@ final class StickerRenderer {
     private static void drawName(Canvas canvas, String text, double x, double y, double size, int color, int shadow) {
         if (text.isEmpty()) return;
         textPaint.setTextSize((float) size);
-        // Needs device calibration, same baseline assumption as drawSegmentedText.
-        float baseline = (float) y - textPaint.ascent();
+        float baseline = (float) y + TOP_TO_BASELINE * textPaint.getTextSize();
         textPaint.setColor(Color.BLACK);
         canvas.drawText(text, (float) x + shadow, baseline + shadow, textPaint);
         textPaint.setColor(color);

@@ -5,7 +5,7 @@
   let sendStateTimer = 0;
   const qqButton = document.getElementById("qqButton");
   const qqButtonLabel = qqButton.querySelector("span");
-  const idleSendLabel = "放入 QQ";
+  const idleSendLabel = "发到 QQ";
 
   function resetSendButton() {
     sendState = "idle";

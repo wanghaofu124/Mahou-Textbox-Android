@@ -307,7 +307,6 @@ public class MahouInputMethodService extends InputMethodService {
         destroyed = true;
         main.removeCallbacks(sweepAlbum);
         main.removeCallbacks(continueCaptionSend);
-        sweep();
         worker.shutdownNow();
         try { unregisterReceiver(changes); } catch (IllegalArgumentException ignored) {}
         ImeReturnChip.hide(this);
@@ -320,6 +319,7 @@ public class MahouInputMethodService extends InputMethodService {
             webView = null;
         }
         inputRoot = null;
+        sweep();
         super.onDestroy();
     }
 
@@ -387,7 +387,8 @@ public class MahouInputMethodService extends InputMethodService {
 
     private void send(String dataUrl) {
         if (Build.VERSION.SDK_INT < 29) {
-            Toast.makeText(this, "此功能需要 Android 10 及以上", Toast.LENGTH_SHORT).show();
+            updateImeSendState("error", "此功能需要 Android 10 及以上");
+            notice("此功能需要 Android 10 及以上");
             return;
         }
         EditorInfo info = getCurrentInputEditorInfo();

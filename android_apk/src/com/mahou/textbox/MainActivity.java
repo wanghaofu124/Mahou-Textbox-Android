@@ -37,6 +37,7 @@ import java.io.FileOutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import androidx.activity.ComponentActivity;
@@ -56,6 +57,17 @@ public class MainActivity extends ComponentActivity {
 
     private static final String TAG_SHARE = "MahouShare";
     private static final String TAG_TEST = "MahouTest";
+    // name, text, character, emotion, background, widths. "@custom" is the first custom character.
+    private static final String[][] NATIVE_RENDER_CASES = {
+        {"short", "今天的群聊，开始整活。", "ema", "1", "builtin-1", "1000"},
+        {"long-wrap", "今天的群聊一直在讨论周末要不要一起出去玩，有人想去看电影，有人想去吃火锅，还有人说天气预报会下雨，不如大家都留在家里联机打游戏，反正谁也没有真正决定下来。", "sherri", "3", "builtin-5", "1000"},
+        {"brackets", "【重要通知】今天[不上课]，大家记得带[雨伞]，别忘了【交作业】。", "hiro", "2", "builtin-3", "1000"},
+        {"anan", "夏目安安登场！今天也要[元气满满]地度过。", "anan", "5", "builtin-8", "1000"},
+        {"newlines", "第一行\n第二行稍微长一些，用来观察自动换行的位置\n\n第四行（上一行是空行）", "coco", "4", "builtin-12", "1000"},
+        {"custom-fit", "自定义角色，检查位置和缩放。", "@custom", "1", "builtin-2", "1000"},
+        {"custom-name-blocks", "自定义角色，检查姓名字块的位置、字号和颜色。", "@custom", "2", "builtin-9", "1000"},
+        {"widths", "同一段台词，输出三种宽度做对比。", "reia", "3", "builtin-6", "720,1000,1600"},
+    };
     private static final String SHARE_AUTHORITY = "com.mahou.textbox.share";
     private static final String SHARE_FILE_NAME = "mahou_textbox.png";
     private static final String SHARE_MIME = "image/png";
@@ -272,6 +284,36 @@ public class MainActivity extends ComponentActivity {
         }, 800);
     }
 
+    private void dumpNativeRender() {
+        try {
+            File directory = new File(getExternalFilesDir(null), "native-render");
+            directory.mkdirs();
+            JSONArray characters = new JSONObject(AssetStore.listAssets(this)).getJSONArray("characters");
+            String customCharacter = characters.length() == 0 ? null : characters.getJSONObject(0).getString("id");
+            for (String[] renderCase : NATIVE_RENDER_CASES) {
+                String character = "@custom".equals(renderCase[2]) ? customCharacter : renderCase[2];
+                if (character == null) {
+                    Log.i(TAG_TEST, "native_render_skip " + renderCase[0] + " no custom character");
+                    continue;
+                }
+                for (String width : renderCase[5].split(",")) {
+                    long start = System.nanoTime();
+                    Bitmap bitmap = StickerRenderer.render(this, new RenderParams(
+                            renderCase[1], character, renderCase[3], renderCase[4], Integer.parseInt(width)));
+                    long renderMs = (System.nanoTime() - start) / 1_000_000L;
+                    File file = new File(directory, renderCase[0] + "-" + width + ".png");
+                    try (FileOutputStream output = new FileOutputStream(file)) {
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
+                    }
+                    bitmap.recycle();
+                    Log.i(TAG_TEST, "native_render_saved " + file.getAbsolutePath() + " render_ms=" + renderMs);
+                }
+            }
+        } catch (Exception error) {
+            Log.e(TAG_TEST, "native_render_failed", error);
+        }
+    }
+
     private void runDebugTestAction(String action, int themeSteps, int qqSteps) {
         if (!BuildConfig.DEBUG || webView == null) {
             return;
@@ -304,6 +346,10 @@ public class MainActivity extends ComponentActivity {
         }
         if ("popup".equals(action)) {
             triggerWebAction("popup");
+            return;
+        }
+        if ("native_render_dump".equals(action)) {
+            exportWorker.execute(this::dumpNativeRender);
             return;
         }
         if ("storage_png_probe".equals(action)) {

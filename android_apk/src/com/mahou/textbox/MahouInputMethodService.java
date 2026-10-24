@@ -21,10 +21,9 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputContentInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.content.ClipDescription;
 import android.content.ContentValues;
+import android.graphics.BitmapFactory;
 import android.os.Environment;
 import android.provider.MediaStore;
 import java.io.FileInputStream;
@@ -59,9 +58,7 @@ public class MahouInputMethodService extends InputMethodService {
     private int webViewRecoveryCount;
     private int healthCheckGeneration;
     private boolean imePageReady;
-    private Uri offeredImage;
-    private int offerGeneration;
-    private final Runnable dropOfferedImage = this::dropOfferedImageNow;
+    private final Runnable sweepAlbum = () -> worker.execute(this::sweep);
     private boolean destroyed, inputActive, exportBusy, switchingKeyboard;
     private String captionEditorTarget = "";
     private volatile boolean pendingCaptionSend;
@@ -308,12 +305,9 @@ public class MahouInputMethodService extends InputMethodService {
 
     @Override public void onDestroy() {
         destroyed = true;
-        main.removeCallbacks(dropOfferedImage);
+        main.removeCallbacks(sweepAlbum);
         main.removeCallbacks(continueCaptionSend);
-        Uri current = offeredImage;
-        offeredImage = null;
-        if (current != null) removeOfferedImage(current);
-        sweepOfferedImages(null);
+        sweep();
         worker.shutdownNow();
         try { unregisterReceiver(changes); } catch (IllegalArgumentException ignored) {}
         ImeReturnChip.hide(this);
@@ -409,127 +403,71 @@ public class MahouInputMethodService extends InputMethodService {
         updateImeSendState("busy", "正在准备图片…");
         worker.execute(() -> {
             File temporary = null;
+            Uri media = null;
             try {
                 temporary = PopupShareImage.prepare(getApplicationContext(), dataUrl);
-                File directory = new File(getCacheDir(), "ime-share");
-                if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException();
-                File image = new File(directory, UUID.randomUUID() + ".png");
-                if (!temporary.renameTo(image)) throw new IOException();
-                Uri uri = Uri.parse("content://com.mahou.textbox.share/ime/" + image.getName());
-                main.post(() -> placeImage(uri, target));
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(temporary.getPath(), bounds);
+                sweep();
+                long now = System.currentTimeMillis();
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + now + ".png");
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                values.put(MediaStore.Images.Media.DATE_TAKEN, now);
+                values.put(MediaStore.Images.Media.WIDTH, bounds.outWidth);
+                values.put(MediaStore.Images.Media.HEIGHT, bounds.outHeight);
+                if (Build.VERSION.SDK_INT >= 29) {
+                    values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Mahou");
+                    values.put(MediaStore.Images.Media.IS_PENDING, 1);
+                }
+                media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (media == null) throw new IOException("insert");
+                try (InputStream input = new FileInputStream(temporary); OutputStream output = getContentResolver().openOutputStream(media)) {
+                    if (output == null) throw new IOException("open");
+                    byte[] buffer = new byte[16384];
+                    for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
+                }
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues ready = new ContentValues();
+                    ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+                    getContentResolver().update(media, ready, null, null);
+                }
+                PopupShareImage.discard(temporary);
+                main.post(() -> {
+                    exportBusy = false;
+                    if (destroyed) return;
+                    main.removeCallbacks(sweepAlbum);
+                    main.postDelayed(sweepAlbum, OFFER_KEEP_MS);
+                    String message = "图片已保存到相册。点 QQ 输入框右侧“+”→“相册”，选择最新的魔裁图片发送。";
+                    updateImeSendState("ready", message);
+                    notice(message, 5200);
+                });
             } catch (Exception | OutOfMemoryError error) {
                 PopupShareImage.discard(temporary);
                 main.post(() -> {
                     exportBusy = false;
-                    updateImeSendState("error", "图片没有放进输入框，请重试");
-                    notice("图片没有放进输入框，请重试");
+                    updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
+                    notice("图片没能交给 QQ 识别，请重试");
                 });
+                if (media != null) getContentResolver().delete(media, null, null);
             }
         });
     }
 
-    private void placeImage(Uri uri, String target) {
-        exportBusy = false;
-        if (destroyed) return;
-        EditorInfo info = getCurrentInputEditorInfo();
-        InputConnection connection = getCurrentInputConnection();
-        boolean inserted = false;
-        if (Build.VERSION.SDK_INT >= 25 && connection != null && info != null && target.equals(info.packageName)) {
-            try {
-                grantUriPermission(target, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                InputContentInfo content = new InputContentInfo(uri, new ClipDescription("魔裁图片", new String[]{"image/png"}));
-                inserted = connection.commitContent(content, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null);
-            } catch (RuntimeException ignored) {}
-        }
-        if (inserted) {
-            String message = "图片已放入，请点击 QQ 输入框右侧的“+”发送图片。";
-            updateImeSendState("inserted", message);
-            notice(message, 3600);
-            return;
-        }
-        String name = uri.getLastPathSegment();
-        File image = new File(new File(getCacheDir(), "ime-share"), name == null ? "" : name);
-        worker.execute(() -> offerAlbumImage(image));
-    }
-
-    private void offerAlbumImage(File image) {
-        Uri media = null;
-        try {
-            if (!image.isFile()) throw new IOException("missing");
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + System.currentTimeMillis() + ".png");
-            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-            if (Build.VERSION.SDK_INT >= 29) {
-                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Mahou");
-                values.put(MediaStore.Images.Media.IS_PENDING, 1);
-            }
-            media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-            if (media == null) throw new IOException("insert");
-            try (InputStream input = new FileInputStream(image); OutputStream output = getContentResolver().openOutputStream(media)) {
-                if (output == null) throw new IOException("open");
-                byte[] buffer = new byte[16384];
-                for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
-            }
-            if (Build.VERSION.SDK_INT >= 29) {
-                ContentValues ready = new ContentValues();
-                ready.put(MediaStore.Images.Media.IS_PENDING, 0);
-                getContentResolver().update(media, ready, null, null);
-            }
-            sweepOfferedImages(media);
-            offeredImage = media;
-            offerGeneration++;
-            media = null;
-            main.post(() -> {
-                main.removeCallbacks(dropOfferedImage);
-                main.postDelayed(dropOfferedImage, OFFER_KEEP_MS);
-                String message = "图片已保存到相册。点 QQ 输入框右侧“+”→“相册”，选择最新的魔裁图片发送。";
-                updateImeSendState("ready", message);
-                notice(message, 5200);
-            });
-            return;
-        } catch (Exception | OutOfMemoryError failure) {
-            if (media != null) removeOfferedImage(media);
-        }
-        main.post(() -> {
-            updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
-            notice("图片没能交给 QQ 识别，请重试");
-        });
-    }
-
-    private void dropOfferedImageNow() {
-        int generation = offerGeneration;
-        Uri current = offeredImage;
-        if (current == null) return;
-        worker.execute(() -> {
-            if (generation != offerGeneration) return;
-            offeredImage = null;
-            removeOfferedImage(current);
-            sweepOfferedImages(null);
-        });
-    }
-
-    private int removeOfferedImage(Uri uri) {
-        try { return getContentResolver().delete(uri, null, null); }
-        catch (RuntimeException ignored) { return 0; }
-    }
-
-    private int sweepOfferedImages(Uri keep) {
-        if (Build.VERSION.SDK_INT < 29) return 0;
-        int removed = 0;
+    private void sweep() {
+        if (Build.VERSION.SDK_INT < 29) return;
         String[] projection = { MediaStore.Images.Media._ID };
         String selection = MediaStore.Images.Media.DISPLAY_NAME + " LIKE ? AND " + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?";
         String[] args = { "mahou-%", Environment.DIRECTORY_PICTURES + "/Mahou%" };
         try (android.database.Cursor cursor = getContentResolver().query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, args, null)) {
-            if (cursor == null) return 0;
+            if (cursor == null) return;
             int id = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
             while (cursor.moveToNext()) {
-                Uri item = android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(id));
-                if (keep != null && keep.equals(item)) continue;
-                removed += removeOfferedImage(item);
+                getContentResolver().delete(android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(id)), null, null);
             }
         } catch (RuntimeException ignored) {}
-        return removed;
     }
 
     private void copy(String dataUrl) {

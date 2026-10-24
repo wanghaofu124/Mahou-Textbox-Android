@@ -26,7 +26,6 @@ import android.content.ContentValues;
 import android.graphics.Bitmap;
 import android.os.Environment;
 import android.provider.MediaStore;
-import java.io.FileInputStream;
 import java.io.OutputStream;
 import androidx.core.app.NotificationManagerCompat;
 import android.webkit.JavascriptInterface;
@@ -40,7 +39,6 @@ import androidx.core.view.WindowInsetsCompat;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -386,71 +384,6 @@ public class MahouInputMethodService extends InputMethodService {
         } catch (Exception error) { notice("当前输入框无法读取草稿"); }
     }
 
-    private void send(String dataUrl) {
-        if (Build.VERSION.SDK_INT < 29) {
-            updateImeSendState("error", "此功能需要 Android 10 及以上");
-            notice("此功能需要 Android 10 及以上");
-            return;
-        }
-        EditorInfo info = getCurrentInputEditorInfo();
-        String target = info == null || info.packageName == null ? "" : info.packageName;
-        if (!inputActive || sensitive(info) || !isQqTarget(target)) {
-            updateImeSendState("error", "请先打开要发送图片的 QQ 或 TIM 聊天");
-            notice("请先打开要发送图片的 QQ 或 TIM 聊天");
-            return;
-        }
-        if (destroyed) return;
-        if (exportBusy) {
-            updateImeSendState("error", "上一张还在处理，请稍候");
-            notice("上一张还在处理");
-            return;
-        }
-        exportBusy = true;
-        updateImeSendState("busy", "正在准备图片…");
-        worker.execute(() -> {
-            File temporary = null;
-            Uri media = null;
-            try {
-                temporary = PopupShareImage.prepare(getApplicationContext(), dataUrl);
-                sweep();
-                long now = System.currentTimeMillis();
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + now + ".png");
-                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-                values.put(MediaStore.Images.Media.RELATIVE_PATH, ALBUM_PATH);
-                values.put(MediaStore.Images.Media.IS_PENDING, 1);
-                media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-                if (media == null) throw new IOException("insert");
-                try (InputStream input = new FileInputStream(temporary); OutputStream output = getContentResolver().openOutputStream(media)) {
-                    if (output == null) throw new IOException("open");
-                    byte[] buffer = new byte[16384];
-                    for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
-                }
-                ContentValues ready = new ContentValues();
-                ready.put(MediaStore.Images.Media.IS_PENDING, 0);
-                getContentResolver().update(media, ready, null, null);
-                PopupShareImage.discard(temporary);
-                main.post(() -> {
-                    exportBusy = false;
-                    if (destroyed) return;
-                    main.removeCallbacks(sweepAlbum);
-                    main.postDelayed(sweepAlbum, OFFER_KEEP_MS);
-                    String message = "图片已保存到相册。点 QQ 输入框右侧“+”→“相册”，选择最新的魔裁图片发送。";
-                    updateImeSendState("ready", message);
-                    notice(message, 5200);
-                });
-            } catch (Exception | OutOfMemoryError error) {
-                PopupShareImage.discard(temporary);
-                main.post(() -> {
-                    exportBusy = false;
-                    updateImeSendState("error", "图片没能交给 QQ 识别，请重试。");
-                    notice("图片没能交给 QQ 识别，请重试");
-                });
-                if (media != null) getContentResolver().delete(media, null, null);
-            }
-        });
-    }
-
     private void sendNative() {
         if (Build.VERSION.SDK_INT < 29) {
             updateImeSendState("error", "此功能需要 Android 10 及以上");
@@ -654,7 +587,6 @@ public class MahouInputMethodService extends InputMethodService {
         }
         @JavascriptInterface public void importCurrentDraft() { main.post(MahouInputMethodService.this::readDraft); }
         @JavascriptInterface public void requestInputTarget() { main.post(MahouInputMethodService.this::deliverTarget); }
-        @JavascriptInterface public void shareToQQ(String dataUrl) { main.post(() -> send(dataUrl)); }
         @JavascriptInterface public void shareToQQNative() { main.post(() -> sendNative()); }
         @JavascriptInterface public void shareImage(String dataUrl) { main.post(() -> copy(dataUrl)); }
         @JavascriptInterface public void hidePanel() { main.post(() -> { if (!destroyed) requestHideSelf(0); }); }

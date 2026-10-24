@@ -2172,10 +2172,10 @@ async function shareImage() {
 }
 
 async function shareToQQ() {
-  if (!window.AndroidBridge || typeof window.AndroidBridge.shareToQQ !== "function") return shareImage();
+  const waitForImeResult = document.documentElement.classList.contains("ime-mode");
+  if (!window.AndroidBridge || (!waitForImeResult && typeof window.AndroidBridge.shareToQQ !== "function")) return shareImage();
   if (shareBusy) { showAppNotice("上一张还在处理"); return; }
   shareBusy = true;
-  const waitForImeResult = document.documentElement.classList.contains("ime-mode");
   if (waitForImeResult) {
     // ime.html only runs in the IME's own WebView; its bridge renders natively from the stored state.
     window.setImeSendState?.("busy", "正在生成图片…");

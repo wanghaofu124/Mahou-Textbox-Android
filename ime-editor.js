@@ -73,7 +73,6 @@
     textArea.readOnly = true;
     textArea.tabIndex = 0;
     document.getElementById("builtinKeyboard").hidden = false;
-    textArea.focus();
     textArea.setSelectionRange(textArea.value.length, textArea.value.length);
     keyboard = new window.MahouTouchKeyboard(document.getElementById("builtinKeyboard"), {
       commit: insertText,

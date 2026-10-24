@@ -724,6 +724,7 @@ window.setupImageDoubleTap = function setupImageDoubleTap(surface, action) {
 };
 
 window.beginInlineTextEditing = function beginInlineTextEditing() {
+  if (document.documentElement.classList.contains("builtin-keyboard")) return;
   if (!lineText.classList.contains("inline-line-text")) return;
   const alreadyEditing = document.activeElement === lineText;
   lineText.classList.add("inline-editing");

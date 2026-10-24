@@ -12,7 +12,7 @@
     qqButton.dataset.sendState = "idle";
     qqButtonLabel.textContent = idleSendLabel;
     qqButton.title = "";
-    qqButton.setAttribute("aria-label", "把图片放进当前 QQ 输入框");
+    qqButton.setAttribute("aria-label", "把图片保存到相册，再在 QQ 里选择发送");
     qqButton.disabled = !target.canSend;
   }
 
@@ -38,14 +38,13 @@
     sendState = state;
     const labels = {
       busy: "处理中…",
-      inserted: "已放入",
       ready: "点+发送",
       error: "重试",
     };
     qqButton.dataset.sendState = state;
     qqButtonLabel.textContent = labels[state] || idleSendLabel;
     qqButton.title = message || "";
-    qqButton.setAttribute("aria-label", message || "把图片放进当前 QQ 输入框");
+    qqButton.setAttribute("aria-label", message || "把图片保存到相册，再在 QQ 里选择发送");
     qqButton.disabled = state === "busy" || !target.canSend;
     if (state !== "busy" && state !== "idle") {
       sendStateTimer = setTimeout(() => {

@@ -71,7 +71,7 @@
     }
     document.documentElement.classList.add("builtin-keyboard");
     textArea.readOnly = true;
-    textArea.tabIndex = 0;
+    textArea.inert = true;
     document.getElementById("builtinKeyboard").hidden = false;
     textArea.setSelectionRange(textArea.value.length, textArea.value.length);
     keyboard = new window.MahouTouchKeyboard(document.getElementById("builtinKeyboard"), {

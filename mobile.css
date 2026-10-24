@@ -64,7 +64,6 @@ textarea { display: block; min-height: 112px; max-height: 220px; resize: none; l
 .preview-stage { position: relative; width: 100%; aspect-ratio: 2560/834; margin-inline: auto; }
 .preview-stage textarea.inline-line-text { position: absolute; left: 28.4375%; top: 42.565948%; width: 62.929688%; height: 53.357314%; min-height: 0; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 2px; background: transparent; color: transparent; -webkit-text-fill-color: transparent; caret-color: #fff; font-family: MahouFont,"Microsoft YaHei",sans-serif; font-size: 16px; line-height: 1.4; resize: none; overflow: auto; overflow-wrap: anywhere; overscroll-behavior: contain; }
 .preview-stage textarea.inline-line-text:focus, .preview-stage textarea.inline-line-text.inline-editing { background: rgba(0,0,0,.65); color: #fff; -webkit-text-fill-color: #fff; outline: 1px solid var(--accent); outline-offset: 3px; box-shadow: none; }
-.editor-root.builtin-keyboard .preview-stage textarea.inline-line-text:focus, .editor-root.builtin-keyboard .preview-stage textarea.inline-line-text.inline-editing { background: transparent; color: transparent; -webkit-text-fill-color: transparent; outline: 0; }
 .preview-stage textarea.inline-line-text::placeholder { color: rgba(255,255,255,.7); -webkit-text-fill-color: rgba(255,255,255,.7); }
 .preview-stage textarea.inline-line-text::selection { background: #177a52; color: #fff; -webkit-text-fill-color: #fff; }
 .preview-stage textarea.inline-line-text[readonly] { pointer-events: none; }

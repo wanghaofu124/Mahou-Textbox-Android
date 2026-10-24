@@ -58,8 +58,8 @@ public class MahouInputMethodService extends InputMethodService {
     private int webViewRecoveryCount;
     private int healthCheckGeneration;
     private boolean imePageReady;
-    private final Runnable sweepAlbum = () -> worker.execute(this::sweep);
     private boolean destroyed, inputActive, exportBusy, switchingKeyboard;
+    private final Runnable sweepAlbum = () -> { if (!exportBusy) worker.execute(this::sweep); };
     private String captionEditorTarget = "";
     private volatile boolean pendingCaptionSend;
     private int captionSendWaits;

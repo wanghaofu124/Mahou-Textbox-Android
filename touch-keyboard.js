@@ -136,23 +136,18 @@
       button.title = label;
       if (icon) button.innerHTML = `<i data-lucide="${icon}"></i>`;
       else button.textContent = label;
-      let timer, repeated = false;
+      let timer;
       const stop = () => { clearTimeout(timer); clearInterval(timer); };
       button.addEventListener("pointerdown", event => {
-        repeated = false;
+        this.press(action);
         if (action === "delete") {
           button.setPointerCapture(event.pointerId);
-          timer = setTimeout(() => {
-            repeated = true;
-            this.press(action);
-            timer = setInterval(() => this.press(action), 65);
-          }, 400);
+          timer = setTimeout(() => { timer = setInterval(() => this.press(action), 65); }, 400);
         }
       });
       button.addEventListener("pointerup", stop);
-      button.addEventListener("pointercancel", () => { stop(); repeated = true; });
+      button.addEventListener("pointercancel", stop);
       button.addEventListener("lostpointercapture", stop);
-      button.addEventListener("click", () => { if (!repeated) this.press(action); repeated = false; });
       return button;
     }
     renderKeys() {

@@ -452,6 +452,10 @@ public class MahouInputMethodService extends InputMethodService {
     }
 
     private void sendNative() {
+        if (Build.VERSION.SDK_INT < 29) {
+            Toast.makeText(this, "此功能需要 Android 10 及以上", Toast.LENGTH_SHORT).show();
+            return;
+        }
         EditorInfo info = getCurrentInputEditorInfo();
         String target = info == null || info.packageName == null ? "" : info.packageName;
         if (!inputActive || sensitive(info) || !isQqTarget(target)) {
@@ -478,24 +482,17 @@ public class MahouInputMethodService extends InputMethodService {
                 ContentValues values = new ContentValues();
                 values.put(MediaStore.Images.Media.DISPLAY_NAME, "mahou-" + now + ".png");
                 values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-                values.put(MediaStore.Images.Media.DATE_TAKEN, now);
-                values.put(MediaStore.Images.Media.WIDTH, bitmap.getWidth());
-                values.put(MediaStore.Images.Media.HEIGHT, bitmap.getHeight());
-                if (Build.VERSION.SDK_INT >= 29) {
-                    values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Mahou");
-                    values.put(MediaStore.Images.Media.IS_PENDING, 1);
-                }
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, ALBUM_PATH);
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
                 media = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
                 if (media == null) throw new IOException("insert");
                 try (OutputStream output = getContentResolver().openOutputStream(media)) {
                     if (output == null) throw new IOException("open");
                     if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new IOException("compress");
                 }
-                if (Build.VERSION.SDK_INT >= 29) {
-                    ContentValues ready = new ContentValues();
-                    ready.put(MediaStore.Images.Media.IS_PENDING, 0);
-                    getContentResolver().update(media, ready, null, null);
-                }
+                ContentValues ready = new ContentValues();
+                ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(media, ready, null, null);
                 main.post(() -> {
                     exportBusy = false;
                     if (destroyed) return;
